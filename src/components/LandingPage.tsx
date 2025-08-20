@@ -15,6 +15,7 @@ const LandingPage = () => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCard, setShowCard] = useState(true);
   const [hasTyped, setHasTyped] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -93,21 +94,48 @@ const LandingPage = () => {
             Create AI Employees
           </h1>
           <h2 className="text-white font-light mt-2" style={{ fontSize: '48px', lineHeight: '1.2' }}>
-            in seconds<span className="inline-block w-3 h-10 bg-white ml-2 animate-pulse"></span>
+            in seconds<span 
+              className="inline-block ml-2" 
+              style={{
+                width: '20px',
+                height: '48px',
+                backgroundColor: 'white',
+                animation: 'blink 1s infinite'
+              }}
+            ></span>
           </h2>
         </div>
 
         {/* Input Container */}
         <div className="relative">
-          <div className={`transition-all duration-300 ${
-            isExpanded 
-              ? 'bg-[#1E1E1E] border border-[#818181]' 
-              : 'bg-[#1E1E1E] border border-solid border-[rgba(129,129,129,0.5)]'
-          }`}
+          {/* Glow effect when focused */}
+          {isFocused && (
+            <div 
+              className="absolute inset-0 rounded-2xl opacity-50 pointer-events-none"
+              style={{
+                background: 'radial-gradient(circle at center, rgba(255, 255, 255, 0.1), transparent 70%)',
+                filter: 'blur(20px)',
+                transform: 'scale(1.05)',
+              }}
+            />
+          )}
+          
+          <div className={`relative transition-all duration-500`}
           style={{
             borderRadius: '16px',
             padding: '24px',
             minHeight: '140px',
+            backgroundColor: '#1E1E1E',
+            border: '0.5px solid',
+            borderColor: isFocused 
+              ? 'rgba(255, 255, 255, 0.4)' 
+              : isExpanded 
+                ? 'rgba(129, 129, 129, 0.6)' 
+                : 'rgba(129, 129, 129, 0.2)',
+            boxShadow: isFocused 
+              ? '0 0 40px rgba(255, 255, 255, 0.1), inset 0 0 20px rgba(255, 255, 255, 0.05)' 
+              : 'none',
+            transform: isFocused ? 'translateY(-2px)' : 'translateY(0)',
           }}>
             {/* Attached Files */}
             {attachedFiles.length > 0 && (
@@ -133,14 +161,17 @@ const LandingPage = () => {
               ref={textareaRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
               placeholder="Ask me anything..."
-              className="w-full bg-transparent text-white placeholder-gray-400 resize-none outline-none"
+              className="w-full bg-transparent text-white placeholder-gray-400 resize-none outline-none transition-all duration-300"
               rows={1}
               style={{ 
                 minHeight: '32px',
                 fontFamily: 'Saira, system-ui, sans-serif',
                 fontSize: '18px',
                 lineHeight: '28px',
+                color: isFocused ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.9)',
               }}
             />
 

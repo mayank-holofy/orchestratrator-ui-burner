@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
+import logo from '../assets/logo.svg';
 
 interface EmployeeCardProps {
   visible?: boolean;
@@ -94,6 +95,16 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ visible = true }) => {
 
             {/* Card Content */}
             <div className="relative h-full flex flex-col">
+              {/* Logo - large and centered */}
+              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                <img 
+                  src={logo} 
+                  alt="Some100" 
+                  className="h-20 w-auto opacity-30"
+                  style={{ filter: 'brightness(0) invert(1)' }}
+                />
+              </div>
+              
               {/* Top Section - Employee Type Label */}
               <div className="absolute top-3 left-3" style={{ writingMode: 'vertical-rl' }}>
                 <div className="text-gray-500 text-[7px] uppercase tracking-[1px] font-light">
