@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    background-color: rgb(3 7 18);
+    color: rgb(243 244 246);
+    font-family: 'Saira', system-ui, sans-serif;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background-color: rgb(17 24 39);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background-color: rgb(55 65 81);
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgb(75 85 99);
+  }
+}
