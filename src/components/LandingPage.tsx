@@ -14,8 +14,8 @@ const LandingPage = () => {
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCard, setShowCard] = useState(true);
-  const [hasTyped, setHasTyped] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -25,16 +25,11 @@ const LandingPage = () => {
       if (message || attachedFiles.length > 0) {
         textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
         setIsExpanded(true);
-        // Hide card when user starts typing
-        if (message.length > 0 && !hasTyped) {
-          setShowCard(false);
-          setHasTyped(true);
-        }
       } else {
         setIsExpanded(false);
       }
     }
-  }, [message, attachedFiles, hasTyped]);
+  }, [message, attachedFiles]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -51,6 +46,27 @@ const LandingPage = () => {
 
   const removeFile = (id: string) => {
     setAttachedFiles(attachedFiles.filter(f => f.id !== id));
+  };
+
+  const handleSendMessage = () => {
+    if (message.trim() || attachedFiles.length > 0) {
+      // Add message to messages array
+      setMessages([...messages, { text: message, files: attachedFiles }]);
+      
+      // Hide the card when first message is sent
+      if (messages.length === 0) {
+        setShowCard(false);
+      }
+      
+      // Clear input
+      setMessage('');
+      setAttachedFiles([]);
+      
+      // Reset textarea height
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    }
   };
 
   return (
@@ -163,6 +179,12 @@ const LandingPage = () => {
               onChange={(e) => setMessage(e.target.value)}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
               placeholder="Ask me anything..."
               className="w-full bg-transparent text-white placeholder-gray-400 resize-none outline-none transition-all duration-300"
               rows={1}
@@ -208,6 +230,7 @@ const LandingPage = () => {
 
                 {/* Send Button */}
                 <button 
+                  onClick={handleSendMessage}
                   className="bg-white text-black p-2.5 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   disabled={!message.trim() && attachedFiles.length === 0}
                 >
