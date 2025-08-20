@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, ChevronDown, X, RotateCcw, MoreVertical } from 'lucide-react';
+import { Plus, Mic, Send, ChevronDown, X, RotateCcw, MoreVertical, Expand, Minimize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import logo from '../assets/logo.svg';
 import EmployeeCard from './EmployeeCard';
@@ -26,6 +26,7 @@ const LandingPage = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isInChatState, setIsInChatState] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -466,12 +467,91 @@ const LandingPage = () => {
       >
         <div className="p-24 h-full overflow-y-auto">
             <div className="mb-8">
-              <h2 className="text-white text-2xl font-light">AGENT</h2>
+              <h2 className="text-white text-2xl font-light">WORKER ID</h2>
             </div>
 
-            {/* Employee Card in Brief Area */}
-            <div className="flex justify-start mb-8">
-              <EmployeeCard visible={true} />
+            {/* Employee Card with Metadata */}
+            <div className="flex gap-8 mb-8 items-start">
+              <div className="flex-shrink-0">
+                <EmployeeCard visible={true} />
+              </div>
+              
+              {/* Worker Metadata */}
+              <div className="flex-1">
+                {/* Name */}
+                <div className="mb-6">
+                  <p className="text-gray-500 text-xs mb-2">NAME</p>
+                  <p className="text-gray-300 text-lg">Mr Cabbage Flower</p>
+                </div>
+                
+                {/* Email */}
+                <div className="mb-6">
+                  <p className="text-gray-500 text-xs mb-2">EMAIL</p>
+                  <p className="text-gray-300">cabbageflower@agmail.com</p>
+                </div>
+                
+                {/* Phone */}
+                <div className="mb-6">
+                  <p className="text-gray-500 text-xs mb-2">PHONE NO</p>
+                  <p className="text-gray-300">+44 776 183 3949</p>
+                </div>
+                
+                {/* Capabilities */}
+                <div>
+                  <p className="text-gray-500 text-xs mb-3">CAPABILITIES</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-300 text-sm">Code Interpreter & Data Analysis</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-300 text-sm">Phone calls</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-300 text-sm">Web search</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-500">✓</span>
+                      <span className="text-gray-300 text-sm">Gmail</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Desktop Computer Simulation */}
+            <div className="mb-12">
+              <h3 className="text-gray-500 text-xs mb-3">WORKER COMPUTER</h3>
+              <div 
+                className="bg-black border border-gray-800 rounded-lg overflow-hidden w-full relative group"
+                style={{ height: '480px' }}
+              >
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 w-full h-full object-cover rounded-lg"
+                >
+                  <source src="/Computeruse.mp4" type="video/mp4" />
+                </video>
+                
+                {/* Expand Button */}
+                <button
+                  onClick={() => setIsVideoFullscreen(true)}
+                  className="absolute top-4 right-4 p-3 bg-black/50 hover:bg-black/70 rounded-lg transition-all duration-200 group-hover:opacity-100 opacity-60"
+                >
+                  <Expand size={20} className="text-white" />
+                </button>
+                
+                {/* Activity Indicator Overlay */}
+                <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/50 px-3 py-1 rounded-full">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <div className="text-xs text-gray-300">Active Instance</div>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-6">
@@ -496,27 +576,6 @@ const LandingPage = () => {
                 </ol>
               </div>
 
-              <div>
-                <h3 className="text-gray-500 text-xs mb-3">CAPABILITIES</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span>
-                    <span className="text-gray-300 text-sm">Code Interpreter & Data Analysis</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span>
-                    <span className="text-gray-300 text-sm">Phone calls</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span>
-                    <span className="text-gray-300 text-sm">Web search</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-green-500">✓</span>
-                    <span className="text-gray-300 text-sm">Gmail</span>
-                  </div>
-                </div>
-              </div>
             </div>
         </div>
       </motion.div>
@@ -530,6 +589,44 @@ const LandingPage = () => {
       >
         YOU HAVE NO AGENTS
       </motion.div>
+
+      {/* Fullscreen Video Modal */}
+      <AnimatePresence>
+        {isVideoFullscreen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black flex items-center justify-center p-8"
+          >
+            <div className="relative w-full h-full max-w-[90vw] max-h-[90vh] border-2 border-gray-800 rounded-lg overflow-hidden">
+              <video
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-contain"
+              >
+                <source src="/Computeruse.mp4" type="video/mp4" />
+              </video>
+              
+              {/* Close Button */}
+              <button
+                onClick={() => setIsVideoFullscreen(false)}
+                className="absolute top-4 right-4 p-3 bg-black/70 hover:bg-black/90 rounded-lg transition-all duration-200"
+              >
+                <X size={24} className="text-white" />
+              </button>
+              
+              {/* Activity Indicator */}
+              <div className="absolute bottom-6 left-6 flex items-center gap-2 bg-black/70 px-4 py-2 rounded-full">
+                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                <div className="text-sm text-gray-300">Active Instance - Fullscreen Mode</div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
