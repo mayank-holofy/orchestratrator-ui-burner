@@ -118,18 +118,6 @@ const LandingPage = () => {
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
-      {/* Reset Button */}
-      {isInChatState && (
-        <motion.button
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1 }}
-          onClick={resetToLanding}
-          className="absolute top-4 right-4 z-30 text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
-        >
-          <RotateCcw size={20} />
-        </motion.button>
-      )}
 
       {/* Background Video */}
       <motion.div 
@@ -477,11 +465,8 @@ const LandingPage = () => {
         transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
       >
         <div className="p-24 h-full overflow-y-auto">
-            <div className="flex items-center justify-between mb-8">
+            <div className="mb-8">
               <h2 className="text-white text-2xl font-light">AGENT</h2>
-              <button className="text-gray-400 hover:text-white">
-                <MoreVertical size={20} />
-              </button>
             </div>
 
             {/* Employee Card in Brief Area */}
