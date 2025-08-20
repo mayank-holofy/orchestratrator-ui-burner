@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, ChevronDown, X } from 'lucide-react';
+import { Plus, Mic, Send, ChevronDown, X, RotateCcw, MoreVertical } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import logo from '../assets/logo.svg';
 import EmployeeCard from './EmployeeCard';
 
@@ -9,15 +10,26 @@ interface AttachedFile {
   type: string;
 }
 
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
 const LandingPage = () => {
   const [message, setMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCard, setShowCard] = useState(true);
   const [isFocused, setIsFocused] = useState(false);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isInChatState, setIsInChatState] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -30,6 +42,12 @@ const LandingPage = () => {
       }
     }
   }, [message, attachedFiles]);
+
+  useEffect(() => {
+    if (isInChatState && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isInChatState]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -50,12 +68,19 @@ const LandingPage = () => {
 
   const handleSendMessage = () => {
     if (message.trim() || attachedFiles.length > 0) {
-      // Add message to messages array
-      setMessages([...messages, { text: message, files: attachedFiles }]);
+      const newMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: message,
+        timestamp: new Date(),
+      };
       
-      // Hide the card when first message is sent
+      setMessages(prev => [...prev, newMessage]);
+      
+      // Enter chat state and hide card when first message is sent
       if (messages.length === 0) {
         setShowCard(false);
+        setIsInChatState(true);
       }
       
       // Clear input
@@ -66,196 +91,460 @@ const LandingPage = () => {
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto';
       }
+      
+      // Simulate bot response
+      setIsTyping(true);
+      setTimeout(() => {
+        const botMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: "I'll help you analyze the call transcripts and extract the important information. Let me process this request for you.",
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, botMessage]);
+        setIsTyping(false);
+      }, 1500);
     }
   };
 
+  const resetToLanding = () => {
+    setIsInChatState(false);
+    setShowCard(true);
+    setMessages([]);
+    setMessage('');
+    setAttachedFiles([]);
+    setIsTyping(false);
+  };
+
   return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6 relative overflow-hidden">
+    <div className="min-h-screen bg-black relative overflow-hidden">
+      {/* Reset Button */}
+      {isInChatState && (
+        <motion.button
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+          onClick={resetToLanding}
+          className="absolute top-4 right-4 z-30 text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
+        >
+          <RotateCcw size={20} />
+        </motion.button>
+      )}
+
       {/* Background Video */}
-      <div className="absolute inset-0 w-full h-full">
+      <motion.div 
+        className="absolute inset-0 w-full h-full"
+        animate={{ opacity: isInChatState ? 0.3 : 1 }}
+        transition={{ duration: 0.6 }}
+      >
         <video
           autoPlay
           loop
           muted
           playsInline
           className="absolute inset-0 w-full h-full object-cover"
-          style={{ opacity: 1 }}
         >
           <source src="/background-video.mp4" type="video/mp4" />
-          {/* Fallback for browsers that don't support video */}
-          Your browser does not support the video tag.
         </video>
-        {/* Dark overlay for better text readability */}
         <div className="absolute inset-0 bg-black/30"></div>
-      </div>
+      </motion.div>
 
       {/* Logo/Brand */}
-      <div className="absolute top-8 left-8 z-10">
+      <motion.div 
+        className="absolute top-8 left-8 z-20"
+        animate={{ opacity: isInChatState ? 0.5 : 1 }}
+        transition={{ duration: 0.4 }}
+      >
         <img 
           src={logo} 
           alt="Some100 Logo" 
           className="h-12 w-auto"
           style={{ filter: 'brightness(0) invert(1)' }}
         />
-      </div>
+      </motion.div>
 
       {/* Main Content */}
-      <div className="w-full relative z-10" style={{ maxWidth: '768px' }}>
-        {/* Employee Card */}
-        <EmployeeCard visible={showCard} />
-        
-        {/* Title */}
-        <div className="text-center mb-12">
-          <h1 className="text-white font-light" style={{ fontSize: '48px', lineHeight: '1.2' }}>
-            Create AI Employees
-          </h1>
-          <h2 className="text-white font-light mt-2" style={{ fontSize: '48px', lineHeight: '1.2' }}>
-            in seconds<span 
-              className="inline-block ml-2" 
-              style={{
-                width: '20px',
-                height: '48px',
-                backgroundColor: 'white',
-                animation: 'blink 1s infinite'
-              }}
-            ></span>
-          </h2>
-        </div>
+      <motion.div 
+        className="h-screen flex flex-col justify-center items-center px-6 relative z-10"
+        initial={{ opacity: 0 }}
+        animate={{
+          opacity: 1,
+          width: isInChatState ? '50%' : '100%',
+          justifyContent: isInChatState ? 'flex-start' : 'center',
+          paddingTop: isInChatState ? '80px' : '0px',
+        }}
+        transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+      >
+          {/* Employee Card and Title - Fade Out in Chat State */}
+          <AnimatePresence>
+            {!isInChatState && (
+              <motion.div
+                className="w-full"
+                style={{ maxWidth: '768px' }}
+                exit={{ opacity: 0, scale: 0.95, y: -50 }}
+                transition={{ duration: 0.5 }}
+              >
+                <EmployeeCard visible={showCard} />
+                
+                <div className="text-center mb-12">
+                  <h1 className="text-white font-light" style={{ fontSize: '48px', lineHeight: '1.2' }}>
+                    Create AI Employees
+                  </h1>
+                  <h2 className="text-white font-light mt-2" style={{ fontSize: '48px', lineHeight: '1.2' }}>
+                    in seconds<span 
+                      className="inline-block ml-2" 
+                      style={{
+                        width: '20px',
+                        height: '48px',
+                        backgroundColor: 'white',
+                        animation: 'blink 1s infinite'
+                      }}
+                    ></span>
+                  </h2>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        {/* Input Container */}
-        <div className="relative">
-          {/* Glow effect when focused */}
-          {isFocused && (
-            <div 
-              className="absolute inset-0 rounded-2xl opacity-50 pointer-events-none"
-              style={{
-                background: 'radial-gradient(circle at center, rgba(255, 255, 255, 0.1), transparent 70%)',
-                filter: 'blur(20px)',
-                transform: 'scale(1.05)',
-              }}
-            />
+          {/* Chat Messages - Appear in Chat State */}
+          {isInChatState && (
+            <motion.div
+              className="absolute top-20 bottom-32 left-0 right-0 overflow-y-auto flex flex-col justify-end"
+              style={{ maxWidth: '768px', margin: '0 auto' }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6, duration: 0.4 }}
+            >
+              {messages.map((msg, index) => (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  className={`mb-6 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className="max-w-[70%]">
+                    <div
+                      className={`px-4 py-3 rounded-2xl ${
+                        msg.role === 'user'
+                          ? 'bg-white text-black'
+                          : 'bg-[#1a1a1a] text-white border border-gray-800'
+                      }`}
+                    >
+                      <p className="text-[15px]">{msg.content}</p>
+                    </div>
+                    <div className={`mt-1 text-[11px] text-gray-500 ${
+                      msg.role === 'user' ? 'text-right' : 'text-left'
+                    }`}>
+                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+              
+              {isTyping && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex justify-start mb-6"
+                >
+                  <div className="bg-[#1a1a1a] border border-gray-800 px-4 py-3 rounded-2xl">
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              
+              <div ref={messagesEndRef} />
+            </motion.div>
           )}
-          
-          <div className={`relative transition-all duration-500`}
-          style={{
-            borderRadius: '16px',
-            padding: '24px',
-            minHeight: '140px',
-            backgroundColor: '#1E1E1E',
-            border: '0.5px solid',
-            borderColor: isFocused 
-              ? 'rgba(255, 255, 255, 0.4)' 
-              : isExpanded 
-                ? 'rgba(129, 129, 129, 0.6)' 
-                : 'rgba(129, 129, 129, 0.2)',
-            boxShadow: isFocused 
-              ? '0 0 40px rgba(255, 255, 255, 0.1), inset 0 0 20px rgba(255, 255, 255, 0.05)' 
-              : 'none',
-            transform: isFocused ? 'translateY(-2px)' : 'translateY(0)',
-          }}>
-            {/* Attached Files */}
-            {attachedFiles.length > 0 && (
-              <div className="mb-4">
-                <div className="flex flex-wrap gap-2">
-                  {attachedFiles.map(file => (
-                    <div key={file.id} className="flex items-center gap-2 bg-[rgba(30,30,30,1)] text-white px-3 py-1.5 rounded-md text-sm border border-[rgba(129,129,129,0.3)]">
-                      <span>{file.name}</span>
+
+          {/* THE SAME INPUT BOX - Animates from middle to bottom */}
+          <motion.div 
+            className="w-full"
+            style={{ maxWidth: '768px' }}
+            initial={{ opacity: 0 }}
+            animate={{
+              opacity: 1,
+              position: isInChatState ? 'absolute' : 'relative',
+              bottom: isInChatState ? '24px' : 'auto',
+              left: isInChatState ? '0' : 'auto',
+              right: isInChatState ? '0' : 'auto',
+              marginLeft: isInChatState ? 'auto' : '0',
+              marginRight: isInChatState ? 'auto' : '0',
+              zIndex: isInChatState ? 25 : 1,
+            }}
+            transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <div className="relative">
+              {/* Glow effect when focused - only in landing */}
+              {isFocused && !isInChatState && (
+                <div 
+                  className="absolute inset-0 rounded-2xl opacity-50 pointer-events-none"
+                  style={{
+                    background: 'radial-gradient(circle at center, rgba(255, 255, 255, 0.1), transparent 70%)',
+                    filter: 'blur(20px)',
+                    transform: 'scale(1.05)',
+                  }}
+                />
+              )}
+              
+              <motion.div 
+                className="relative"
+                animate={{
+                  borderRadius: '16px',
+                  padding: isInChatState ? '16px 20px' : '24px',
+                  minHeight: isInChatState ? 'auto' : '140px',
+                  backgroundColor: '#1E1E1E',
+                  borderWidth: '0.5px',
+                  borderColor: isFocused && !isInChatState
+                    ? 'rgba(255, 255, 255, 0.4)' 
+                    : isExpanded && !isInChatState
+                      ? 'rgba(129, 129, 129, 0.6)' 
+                      : 'rgba(129, 129, 129, 0.3)',
+                  boxShadow: isFocused && !isInChatState
+                    ? '0 0 40px rgba(255, 255, 255, 0.1), inset 0 0 20px rgba(255, 255, 255, 0.05)' 
+                    : 'none',
+                  y: isFocused && !isInChatState ? -2 : 0,
+                }}
+                transition={{ duration: 0.6 }}
+                style={{ borderStyle: 'solid' }}
+              >
+                {/* Attached Files */}
+                {attachedFiles.length > 0 && (
+                  <div className="mb-4">
+                    <div className="flex flex-wrap gap-2">
+                      {attachedFiles.map(file => (
+                        <div key={file.id} className="flex items-center gap-2 bg-[rgba(30,30,30,1)] text-white px-3 py-1.5 rounded-md text-sm border border-[rgba(129,129,129,0.3)]">
+                          <span>{file.name}</span>
+                          <button 
+                            onClick={() => removeFile(file.id)}
+                            className="hover:bg-[rgba(255,255,255,0.1)] rounded p-0.5"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Original textarea first in landing state */}
+                {!isInChatState && (
+                  <textarea
+                    ref={textareaRef}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    onFocus={() => setIsFocused(true)}
+                    onBlur={() => setIsFocused(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
+                    placeholder="Ask me anything..."
+                    className="w-full bg-transparent text-white placeholder-gray-400 resize-none outline-none transition-all duration-300"
+                    rows={1}
+                    style={{ 
+                      minHeight: '32px',
+                      fontFamily: 'Saira, system-ui, sans-serif',
+                      fontSize: '18px',
+                      lineHeight: '28px',
+                      color: isFocused ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.9)',
+                    }}
+                  />
+                )}
+
+                {/* Original bottom controls in landing state */}
+                {!isInChatState && (
+                  <div className="flex items-center justify-between mt-6">
+                    <div className="flex items-center gap-3">
                       <button 
-                        onClick={() => removeFile(file.id)}
-                        className="hover:bg-[rgba(255,255,255,0.1)] rounded p-0.5"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-[rgba(255,255,255,0.05)] rounded-lg"
                       >
-                        <X size={14} />
+                        <Plus size={22} />
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        onChange={handleFileSelect}
+                        className="hidden"
+                      />
+
+                      <button className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] px-4 py-2 rounded-lg">
+                        <span style={{ fontSize: '15px' }}>Public</span>
+                        <ChevronDown size={18} />
                       </button>
                     </div>
-                  ))}
+
+                    <div className="flex items-center gap-2">
+                      <button className="text-gray-400 hover:text-white transition-colors p-2.5 hover:bg-[rgba(255,255,255,0.05)] rounded-lg">
+                        <Mic size={22} />
+                      </button>
+
+                      <button 
+                        onClick={handleSendMessage}
+                        className="bg-white text-black p-2.5 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled={!message.trim() && attachedFiles.length === 0}
+                      >
+                        <Send size={20} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Chat state - horizontal layout */}
+                {isInChatState && (
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-[rgba(255,255,255,0.05)] rounded-lg"
+                    >
+                      <Plus size={20} />
+                    </button>
+
+                    <textarea
+                      ref={textareaRef}
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      onFocus={() => setIsFocused(true)}
+                      onBlur={() => setIsFocused(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSendMessage();
+                        }
+                      }}
+                      placeholder="Type a message..."
+                      className="flex-1 bg-transparent text-white placeholder-gray-400 resize-none outline-none transition-all duration-300"
+                      rows={1}
+                      style={{ 
+                        minHeight: '24px',
+                        fontFamily: 'Saira, system-ui, sans-serif',
+                        fontSize: '15px',
+                        lineHeight: '24px',
+                        color: isFocused ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.9)',
+                      }}
+                    />
+
+                    <button className="text-gray-400 hover:text-white transition-colors p-2.5 hover:bg-[rgba(255,255,255,0.05)] rounded-lg">
+                      <Mic size={20} />
+                    </button>
+
+                    <button 
+                      onClick={handleSendMessage}
+                      className="bg-white text-black p-2.5 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      disabled={!message.trim() && attachedFiles.length === 0}
+                    >
+                      <Send size={18} />
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            </div>
+          </motion.div>
+
+          {/* Bottom Links - Fade out in chat state */}
+          <AnimatePresence>
+            {!isInChatState && (
+              <motion.div 
+                className="flex justify-center gap-10 mt-10"
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <button className="text-gray-400 hover:text-white transition-colors" style={{ fontSize: '15px' }}>
+                  My Agents
+                </button>
+                <button className="text-gray-400 hover:text-white transition-colors" style={{ fontSize: '15px' }}>
+                  Templates
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+      </motion.div>
+
+      {/* Right Panel - Always Absolute (slides in from right) */}
+      <motion.div
+        className="absolute top-0 right-0 w-1/2 h-full bg-[#0a0a0a] border-l border-gray-900"
+        initial={{ x: '100%' }}
+        animate={{ x: isInChatState ? 0 : '100%' }}
+        transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+      >
+        <div className="p-24 h-full overflow-y-auto">
+            <div className="flex items-center justify-between mb-8">
+              <h2 className="text-white text-2xl font-light">AGENT</h2>
+              <button className="text-gray-400 hover:text-white">
+                <MoreVertical size={20} />
+              </button>
+            </div>
+
+            {/* Employee Card in Brief Area */}
+            <div className="flex justify-start mb-8">
+              <EmployeeCard visible={true} />
+            </div>
+
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-gray-500 text-xs mb-3">PRIMARY PURPOSE</h3>
+                <p className="text-gray-300 leading-relaxed">
+                  Convince prospects to schedule a demo meeting showcasing Someone AI's capabilities and services.
+                </p>
+              </div>
+
+              <div>
+                <h3 className="text-gray-500 text-xs mb-3">CALL DIRECTION</h3>
+                <p className="text-gray-300">Outbound</p>
+              </div>
+
+              <div>
+                <h3 className="text-gray-500 text-xs mb-3">SUCCESS CRITERIA</h3>
+                <ol className="text-gray-300 space-y-2 list-decimal list-inside">
+                  <li>Successfully scheduling a demo meeting without overlapping existing calendar events.</li>
+                  <li>Clearly communicating the AI agent's identity and purpose.</li>
+                  <li>Sending a calendar invite with all necessary details.</li>
+                </ol>
+              </div>
+
+              <div>
+                <h3 className="text-gray-500 text-xs mb-3">CAPABILITIES</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span className="text-gray-300 text-sm">Code Interpreter & Data Analysis</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span className="text-gray-300 text-sm">Phone calls</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span className="text-gray-300 text-sm">Web search</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-500">✓</span>
+                    <span className="text-gray-300 text-sm">Gmail</span>
+                  </div>
                 </div>
               </div>
-            )}
-
-            {/* Textarea */}
-            <textarea
-              ref={textareaRef}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendMessage();
-                }
-              }}
-              placeholder="Ask me anything..."
-              className="w-full bg-transparent text-white placeholder-gray-400 resize-none outline-none transition-all duration-300"
-              rows={1}
-              style={{ 
-                minHeight: '32px',
-                fontFamily: 'Saira, system-ui, sans-serif',
-                fontSize: '18px',
-                lineHeight: '28px',
-                color: isFocused ? 'rgba(255, 255, 255, 1)' : 'rgba(255, 255, 255, 0.9)',
-              }}
-            />
-
-            {/* Bottom Controls */}
-            <div className="flex items-center justify-between mt-6">
-              <div className="flex items-center gap-3">
-                {/* Add File Button */}
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-[rgba(255,255,255,0.05)] rounded-lg"
-                >
-                  <Plus size={22} />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-
-                {/* Public Dropdown */}
-                <button className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] px-4 py-2 rounded-lg">
-                  <span style={{ fontSize: '15px' }}>Public</span>
-                  <ChevronDown size={18} />
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Mic Button */}
-                <button className="text-gray-400 hover:text-white transition-colors p-2.5 hover:bg-[rgba(255,255,255,0.05)] rounded-lg">
-                  <Mic size={22} />
-                </button>
-
-                {/* Send Button */}
-                <button 
-                  onClick={handleSendMessage}
-                  className="bg-white text-black p-2.5 rounded-xl hover:bg-gray-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  disabled={!message.trim() && attachedFiles.length === 0}
-                >
-                  <Send size={20} />
-                </button>
-              </div>
             </div>
-          </div>
         </div>
+      </motion.div>
 
-        {/* Bottom Links */}
-        <div className="flex justify-center gap-10 mt-10">
-          <button className="text-gray-400 hover:text-white transition-colors" style={{ fontSize: '15px' }}>
-            My Agents
-          </button>
-          <button className="text-gray-400 hover:text-white transition-colors" style={{ fontSize: '15px' }}>
-            Templates
-          </button>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="absolute bottom-8 text-gray-500 z-10" style={{ fontSize: '13px', letterSpacing: '0.5px' }}>
+      {/* Footer - Only in landing */}
+      <motion.div 
+        className="absolute bottom-8 left-1/2 transform -translate-x-1/2 text-gray-500 z-10" 
+        style={{ fontSize: '13px', letterSpacing: '0.5px' }}
+        animate={{ opacity: isInChatState ? 0 : 1 }}
+        transition={{ duration: 0.3 }}
+      >
         YOU HAVE NO AGENTS
-      </div>
+      </motion.div>
     </div>
   );
 };

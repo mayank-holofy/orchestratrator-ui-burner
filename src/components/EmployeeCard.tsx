@@ -47,10 +47,10 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ visible = true }) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.8, rotateY: 90 }}
-      animate={{ opacity: 1, scale: 1, rotateY: 0 }}
-      exit={{ opacity: 0, scale: 0.8, y: -50 }}
-      transition={{ duration: 0.6, type: "spring" }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.5 }}
       className="relative mb-8"
       style={{ perspective: '1000px' }}
     >
