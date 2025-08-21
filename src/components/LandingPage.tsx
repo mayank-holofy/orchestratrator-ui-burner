@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Plus, Mic, Send, ChevronDown, X, RotateCcw, MoreVertical, Expand, Minimize2 } from 'lucide-react';
+import { Plus, Mic, Send, ChevronDown, X, RotateCcw, MoreVertical, Expand, Minimize2, User, Monitor, FileText } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import logo from '../assets/logo.svg';
 import EmployeeCard from './EmployeeCard';
@@ -27,6 +27,7 @@ const LandingPage = () => {
   const [isInChatState, setIsInChatState] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isVideoFullscreen, setIsVideoFullscreen] = useState(false);
+  const [activeBriefTab, setActiveBriefTab] = useState<'identity' | 'computer' | 'brief'>('identity');
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -465,13 +466,62 @@ const LandingPage = () => {
         animate={{ x: isInChatState ? 0 : '100%' }}
         transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
       >
-        <div className="p-24 h-full overflow-y-auto">
-            <div className="mb-8">
-              <h2 className="text-white text-2xl font-light">WORKER ID</h2>
-            </div>
+        <div className="flex h-full">
+          {/* Tab Icons - Left Side */}
+          <div className="flex flex-col items-center justify-center gap-8 px-6 border-r border-gray-800">
+            <button
+              onClick={() => setActiveBriefTab('identity')}
+              className={`p-3 rounded-lg transition-all duration-200 ${
+                activeBriefTab === 'identity' 
+                  ? 'bg-white/10 text-white' 
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <User size={20} />
+            </button>
+            
+            <button
+              onClick={() => setActiveBriefTab('brief')}
+              className={`p-3 rounded-lg transition-all duration-200 ${
+                activeBriefTab === 'brief' 
+                  ? 'bg-white/10 text-white' 
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <FileText size={20} />
+            </button>
+            
+            <button
+              onClick={() => setActiveBriefTab('computer')}
+              className={`p-3 rounded-lg transition-all duration-200 ${
+                activeBriefTab === 'computer' 
+                  ? 'bg-white/10 text-white' 
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <Monitor size={20} />
+            </button>
+          </div>
 
-            {/* Employee Card with Metadata */}
-            <div className="flex gap-8 mb-8 items-start">
+          {/* Tab Content - Right Side */}
+          <div className="flex-1 p-24 overflow-hidden relative">
+            <AnimatePresence mode="wait">
+              {/* Identity Tab */}
+              {activeBriefTab === 'identity' && (
+                <motion.div
+                  key="identity"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-full overflow-y-auto"
+                >
+                  <div className="mb-8">
+                    <h2 className="text-white text-2xl font-light">WORKER IDENTITY</h2>
+                  </div>
+
+                  {/* Employee Card with Metadata */}
+                  <div className="flex gap-8 mb-8 items-start">
               <div className="flex-shrink-0">
                 <EmployeeCard visible={true} />
               </div>
@@ -520,13 +570,29 @@ const LandingPage = () => {
                 </div>
               </div>
             </div>
+                </motion.div>
+              )}
 
-            {/* Desktop Computer Simulation */}
-            <div className="mb-12">
-              <h3 className="text-gray-500 text-xs mb-3">WORKER COMPUTER</h3>
+              {/* Computer Tab */}
+              {activeBriefTab === 'computer' && (
+                <motion.div
+                  key="computer"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-full overflow-y-auto"
+                >
+                  <div className="mb-8">
+                    <h2 className="text-white text-2xl font-light">WORKER COMPUTER</h2>
+                  </div>
+
+                  {/* Desktop Computer Simulation */}
+                  <div className="mb-12">
+              <h3 className="text-gray-500 text-xs mb-3">ACTIVE INSTANCE</h3>
               <div 
                 className="bg-black border border-gray-800 rounded-lg overflow-hidden w-full relative group"
-                style={{ height: '480px' }}
+                style={{ aspectRatio: '16/10' }}
               >
                 <video
                   autoPlay
@@ -553,30 +619,128 @@ const LandingPage = () => {
                 </div>
               </div>
             </div>
+                </motion.div>
+              )}
 
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-gray-500 text-xs mb-3">PRIMARY PURPOSE</h3>
-                <p className="text-gray-300 leading-relaxed">
-                  Convince prospects to schedule a demo meeting showcasing Someone AI's capabilities and services.
-                </p>
-              </div>
+              {/* Brief Tab */}
+              {activeBriefTab === 'brief' && (
+                <motion.div
+                  key="brief"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-full overflow-y-auto"
+                >
+                  <div className="mb-8">
+                    <h2 className="text-white text-2xl font-light">CUSTOMER SUPPORT AI WORKER</h2>
+                  </div>
 
-              <div>
-                <h3 className="text-gray-500 text-xs mb-3">CALL DIRECTION</h3>
-                <p className="text-gray-300">Outbound</p>
-              </div>
+                  <div className="space-y-8">
+                    <div>
+                      <h3 className="text-gray-500 text-xs mb-3">CONTEXTUAL UNDERSTANDING</h3>
+                      <ul className="text-gray-300 space-y-2">
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Understand that callers may be reporting bugs or technical issues</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Recognize the importance of accurate customer verification when required</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Be aware that callers may be frustrated or concerned—demonstrate patience and understanding</span>
+                        </li>
+                      </ul>
+                    </div>
 
-              <div>
-                <h3 className="text-gray-500 text-xs mb-3">SUCCESS CRITERIA</h3>
-                <ol className="text-gray-300 space-y-2 list-decimal list-inside">
-                  <li>Successfully scheduling a demo meeting without overlapping existing calendar events.</li>
-                  <li>Clearly communicating the AI agent's identity and purpose.</li>
-                  <li>Sending a calendar invite with all necessary details.</li>
-                </ol>
-              </div>
+                    <div>
+                      <h3 className="text-gray-500 text-xs mb-3">CONVERSATION OBJECTIVES</h3>
+                      <ul className="text-gray-300 space-y-2">
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Ensure a friendly and helpful customer experience from greeting to resolution</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Accurately verify customer identity (when necessary)</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Thoroughly understand and document the customer's bug or issue</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Guide customers through appropriate troubleshooting steps</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Escalate complex or critical issues to the relevant technical team</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Clearly communicate next steps and set expectations for follow-up</span>
+                        </li>
+                      </ul>
+                    </div>
 
-            </div>
+                    <div>
+                      <h3 className="text-gray-500 text-xs mb-3">CONVERSATION FRAMEWORK</h3>
+                      <div className="space-y-3">
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">Friendly Introduction</p>
+                          <p className="text-gray-300">Greet warmly, introduce yourself by name, state your role in customer support</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">Customer Verification</p>
+                          <p className="text-gray-300">Politely request essential details to verify identity when required</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">Understanding the Issue</p>
+                          <p className="text-gray-300">Listen attentively, express empathy, ask clarifying questions for relevant details</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">Troubleshooting & Documentation</p>
+                          <p className="text-gray-300">Guide through basic steps, record all important bug information and error codes</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">Escalation</p>
+                          <p className="text-gray-300">Escalate complex issues to specialists, inform about process and set expectations</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-400 font-medium mb-1">Wrapping Up</p>
+                          <p className="text-gray-300">Summarize actions taken, provide ticket number, explain update process</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h3 className="text-gray-500 text-xs mb-3">RESPONSE GUIDELINES</h3>
+                      <ul className="text-gray-300 space-y-2">
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Stay professional, courteous, and solution-focused throughout</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Use clear and concise language; avoid technical jargon unless appropriate</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Maintain confidentiality of personal and account information</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <span className="text-gray-500 mt-1">•</span>
+                          <span>Always aim to reduce customer effort and maximize satisfaction</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </motion.div>
 
