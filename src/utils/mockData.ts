@@ -1,4 +1,4 @@
-import { Message, ThinkingStep, AIAction } from '../types/chat';
+import type { ThinkingStep, AIAction } from '../types/chat';
 import { v4 as uuidv4 } from 'uuid';
 
 export const mockThinkingSteps: ThinkingStep[] = [

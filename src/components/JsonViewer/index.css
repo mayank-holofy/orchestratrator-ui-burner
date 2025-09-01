@@ -1,0 +1,26 @@
+.json-viewer {
+  font-family: 'Saira', sans-serif;
+  color: #fff;
+  border-radius: 8px;
+  overflow: auto;
+}
+
+.json-viewer::-webkit-scrollbar {
+  display: none;
+}
+
+.json-pair {
+  margin-bottom: 0.5rem;
+  display: flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.json-key {
+  color: rgb(136, 174, 206);
+}
+
+.json-value {
+  color: rgb(181, 189, 104);
+  white-space: pre-wrap;
+}

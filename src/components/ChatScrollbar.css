@@ -1,0 +1,13 @@
+/* Invisible scrollbars for chat and tabs */
+.chat-scrollbar,
+.tab-scrollbar {
+  /* Firefox */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* Webkit browsers (Chrome, Safari, Edge) */
+.chat-scrollbar::-webkit-scrollbar,
+.tab-scrollbar::-webkit-scrollbar {
+  display: none;
+}

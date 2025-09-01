@@ -10,14 +10,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@langchain/core": "^0.3.72",
+    "@langchain/langgraph-sdk": "^0.0.112",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.21",
     "axios": "^1.11.0",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.540.0",
+    "nuqs": "^2.5.2",
     "postcss": "^8.5.6",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-icons": "^5.5.0",
+    "react-router-dom": "^7.8.2",
     "tailwindcss": "^4.1.12",
     "uuid": "^11.1.0"
   },

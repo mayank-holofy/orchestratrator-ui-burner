@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:orchestrator.some1.ai)",
+      "Bash(npm run build:*)",
+      "Read(/Users/julian/Desktop/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

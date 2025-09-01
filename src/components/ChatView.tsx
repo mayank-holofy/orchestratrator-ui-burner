@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Mic, Send, ChevronDown, X, MoreVertical } from 'lucide-react';
+import { Plus, Mic, Send, MoreVertical } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -14,7 +14,7 @@ interface ChatViewProps {
   onBack?: () => void;
 }
 
-const ChatView: React.FC<ChatViewProps> = ({ initialMessage, onBack }) => {
+const ChatView: React.FC<ChatViewProps> = ({ initialMessage }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
