@@ -52,6 +52,23 @@ interface GraphSchema {
   context_schema?: any;
 }
 
+interface CronJob {
+  cron_id: string;
+  thread_id?: string;
+  assistant_id: string;
+  schedule: string;
+  payload?: any;
+  created_at: string;
+  updated_at: string;
+  end_time?: string;
+  next_run_date?: string;
+  metadata?: any;
+  user_id?: string;
+  webhook?: string;
+  multitask_strategy?: 'reject' | 'rollback' | 'interrupt' | 'enqueue';
+  on_completion?: 'delete' | 'keep';
+}
+
 class OrchestratorAPI {
   private baseUrl: string;
 
@@ -278,6 +295,201 @@ class OrchestratorAPI {
       throw new Error(`Failed to cancel run: ${response.statusText}`);
     }
   }
+
+  // Cancel all runs (global cancel)
+  async cancelAllRuns(): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/runs/cancel`, {
+      method: 'POST'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to cancel all runs: ${response.statusText}`);
+    }
+  }
+
+  // Get active runs for a thread
+  async getActiveRuns(threadId?: string): Promise<Run[]> {
+    const url = threadId 
+      ? `${this.baseUrl}/threads/${threadId}/runs?status=pending,running`
+      : `${this.baseUrl}/runs?status=pending,running`;
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to get active runs: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Get thread history with checkpoints
+  async getThreadHistory(threadId: string, options?: {
+    before?: string;
+    limit?: number;
+    metadata?: Record<string, any>;
+  }): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (options?.before) params.set('before', options.before);
+    if (options?.limit) params.set('limit', options.limit.toString());
+    if (options?.metadata) params.set('metadata', JSON.stringify(options.metadata));
+    
+    const url = `${this.baseUrl}/threads/${threadId}/history${params.toString() ? '?' + params.toString() : ''}`;
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to get thread history: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Update thread state (for rollback)
+  async updateThreadState(threadId: string, state: any, asNode?: string): Promise<any> {
+    const response = await fetch(`${this.baseUrl}/threads/${threadId}/state`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        values: state,
+        as_node: asNode
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to update thread state: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Get thread interrupts
+  async getThreadInterrupts(threadId: string): Promise<any[]> {
+    const response = await fetch(`${this.baseUrl}/threads/${threadId}/interrupts`);
+    if (!response.ok) {
+      throw new Error(`Failed to get thread interrupts: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Resume from interrupt
+  async resumeFromInterrupt(threadId: string, command?: any): Promise<Run> {
+    const response = await fetch(`${this.baseUrl}/threads/${threadId}/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command: command || { resume: null },
+        multitask_strategy: 'enqueue'
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to resume from interrupt: ${response.statusText}`);
+    }
+    return response.json();
+  }
+
+  // Cron Job Management
+  async createCronJob(threadId: string, cronData: {
+    assistant_id: string;
+    schedule: string;
+    input?: any;
+    metadata?: any;
+    end_time?: string;
+    webhook?: string;
+    multitask_strategy?: 'reject' | 'rollback' | 'interrupt' | 'enqueue';
+  }): Promise<CronJob> {
+    const response = await fetch(`${this.baseUrl}/threads/${threadId}/runs/crons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...cronData,
+        multitask_strategy: cronData.multitask_strategy || 'enqueue'
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to create cron job: ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
+
+  async searchCronJobs(params: {
+    assistant_id?: string;
+    thread_id?: string;
+    limit?: number;
+    offset?: number;
+    sort_by?: 'cron_id' | 'assistant_id' | 'thread_id' | 'next_run_date' | 'end_time' | 'created_at' | 'updated_at';
+    sort_order?: 'asc' | 'desc';
+    select?: string[];
+  } = {}): Promise<CronJob[]> {
+    const response = await fetch(`${this.baseUrl}/runs/crons/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        limit: 100,
+        sort_by: 'created_at',
+        sort_order: 'desc',
+        ...params
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to search cron jobs: ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
+
+  async countCronJobs(params: {
+    assistant_id?: string;
+    thread_id?: string;
+  } = {}): Promise<number> {
+    const response = await fetch(`${this.baseUrl}/runs/crons/count`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to count cron jobs: ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
+
+  async deleteCronJob(cronId: string): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/runs/crons/${cronId}`, {
+      method: 'DELETE'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to delete cron job: ${response.statusText}`);
+    }
+  }
+
+  // Create stateless cron job
+  async createStatelessCronJob(cronData: {
+    assistant_id: string;
+    schedule: string;
+    input?: any;
+    metadata?: any;
+    end_time?: string;
+    webhook?: string;
+    multitask_strategy?: 'reject' | 'rollback' | 'interrupt' | 'enqueue';
+    on_completion?: 'delete' | 'keep';
+  }): Promise<CronJob> {
+    const response = await fetch(`${this.baseUrl}/runs/crons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...cronData,
+        multitask_strategy: cronData.multitask_strategy || 'enqueue',
+        on_completion: cronData.on_completion || 'delete'
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to create stateless cron job: ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
 }
 
 export const orchestratorAPI = new OrchestratorAPI();
@@ -288,5 +500,6 @@ export type {
   Thread,
   Run,
   StreamEvent,
-  GraphSchema
+  GraphSchema,
+  CronJob
 };

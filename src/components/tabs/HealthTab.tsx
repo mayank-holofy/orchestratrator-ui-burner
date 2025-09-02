@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
-import { Heart, CheckCircle, XCircle, AlertCircle, Loader2, RefreshCw, Server, Database, Zap } from 'lucide-react';
+import { Heart, CheckCircle, XCircle, AlertCircle, Loader2, RefreshCw, Server, Database, Zap, StopCircle, PlayCircle, Activity } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { orchestratorAPI } from '../../services/orchestrator';
+import { orchestratorAPI, type Run } from '../../services/orchestrator';
 import { createClient } from '../../lib/client';
 import { getDeployment } from '../../lib/environment/deployments';
 import '../ChatScrollbar.css';
@@ -33,6 +33,8 @@ const HealthTab = ({ assistantId, threadId }: HealthTabProps) => {
     lastCheck: null
   });
   const [isChecking, setIsChecking] = useState(false);
+  const [activeRuns, setActiveRuns] = useState<Run[]>([]);
+  const [cancellingRuns, setCancellingRuns] = useState<Set<string>>(new Set());
 
   const checkHealth = async () => {
     setIsChecking(true);
@@ -132,6 +134,86 @@ const HealthTab = ({ assistantId, threadId }: HealthTabProps) => {
     return () => clearInterval(interval);
   }, [assistantId, threadId]);
 
+  // Fetch active runs
+  useEffect(() => {
+    const fetchActiveRuns = async () => {
+      if (!threadId) {
+        setActiveRuns([]);
+        return;
+      }
+      try {
+        const runs = await orchestratorAPI.getActiveRuns(threadId);
+        setActiveRuns(runs);
+      } catch (error) {
+        console.error('Failed to fetch active runs:', error);
+        setActiveRuns([]);
+      }
+    };
+
+    fetchActiveRuns();
+    // Poll every 5 seconds for active runs
+    const interval = setInterval(fetchActiveRuns, 5000);
+    return () => clearInterval(interval);
+  }, [threadId]);
+
+  const handleCancelRun = async (runId: string) => {
+    if (!threadId || cancellingRuns.has(runId)) return;
+
+    setCancellingRuns(prev => new Set(prev).add(runId));
+    try {
+      await orchestratorAPI.cancelRun(threadId, runId);
+      // Remove from active runs immediately
+      setActiveRuns(prev => prev.filter(run => run.run_id !== runId));
+    } catch (error) {
+      console.error('Failed to cancel run:', error);
+    } finally {
+      setCancellingRuns(prev => {
+        const updated = new Set(prev);
+        updated.delete(runId);
+        return updated;
+      });
+    }
+  };
+
+  const handleCancelAllRuns = async () => {
+    try {
+      await orchestratorAPI.cancelAllRuns();
+      setActiveRuns([]);
+    } catch (error) {
+      console.error('Failed to cancel all runs:', error);
+    }
+  };
+
+  const getRunStatusIcon = (status: string) => {
+    switch (status) {
+      case 'running':
+        return <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />;
+      case 'pending':
+        return <PlayCircle className="w-4 h-4 text-yellow-400" />;
+      case 'success':
+        return <CheckCircle className="w-4 h-4 text-green-400" />;
+      case 'error':
+        return <XCircle className="w-4 h-4 text-red-400" />;
+      default:
+        return <AlertCircle className="w-4 h-4 text-gray-400" />;
+    }
+  };
+
+  const getRunStatusColor = (status: string) => {
+    switch (status) {
+      case 'running':
+        return 'bg-blue-500/10 border-blue-500/30 text-blue-400';
+      case 'pending':
+        return 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400';
+      case 'success':
+        return 'bg-green-500/10 border-green-500/30 text-green-400';
+      case 'error':
+        return 'bg-red-500/10 border-red-500/30 text-red-400';
+      default:
+        return 'bg-gray-800/30 border-gray-700/30 text-gray-400';
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'healthy':
@@ -185,6 +267,71 @@ const HealthTab = ({ assistantId, threadId }: HealthTabProps) => {
           </p>
         )}
       </div>
+
+      {/* Active Runs Section */}
+      {(activeRuns.length > 0 || threadId) && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 bg-gray-800/20 rounded-lg border border-gray-700/30"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <Activity className="w-5 h-5 text-blue-400" />
+              <h3 className="text-white font-medium">Active Operations</h3>
+              <span className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded">
+                {activeRuns.length}
+              </span>
+            </div>
+            {activeRuns.length > 1 && (
+              <button
+                onClick={handleCancelAllRuns}
+                className="px-3 py-1 text-xs rounded bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors flex items-center gap-1"
+              >
+                <StopCircle className="w-3 h-3" />
+                Stop All
+              </button>
+            )}
+          </div>
+          
+          <div className="space-y-2">
+            {activeRuns.length === 0 && threadId && (
+              <div className="flex items-center gap-2 text-gray-400 text-sm p-2">
+                <CheckCircle className="w-4 h-4" />
+                <span>No active operations</span>
+              </div>
+            )}
+            {activeRuns.map((run) => (
+              <div key={run.run_id} className={`flex items-center justify-between p-3 rounded border text-sm ${getRunStatusColor(run.status)}`}>
+                <div className="flex items-center gap-3">
+                  {getRunStatusIcon(run.status)}
+                  <div>
+                    <span className="font-mono text-xs">{run.run_id.slice(0, 12)}...</span>
+                    <div className="text-xs opacity-70 mt-1">
+                      Started: {new Date(run.created_at).toLocaleTimeString()}
+                    </div>
+                  </div>
+                  <span className="px-2 py-1 text-xs bg-black/20 rounded capitalize">
+                    {run.status}
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleCancelRun(run.run_id)}
+                  disabled={cancellingRuns.has(run.run_id)}
+                  className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 transition-colors disabled:opacity-50"
+                >
+                  {cancellingRuns.has(run.run_id) ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <StopCircle className="w-3 h-3" />
+                  )}
+                  Cancel
+                </button>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Status Grid */}
       <div className="grid gap-4">

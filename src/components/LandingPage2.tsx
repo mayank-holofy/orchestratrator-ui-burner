@@ -9,6 +9,7 @@ import {
   Wrench,
   Activity as ActivityIcon,
   Heart,
+  Clock,
   StopCircle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -18,12 +19,14 @@ import PlanTab from './tabs/PlanTab';
 import ToolsTab from './tabs/ToolsTab';
 import ActivityTab from './tabs/ActivityTab';
 import HealthTab from './tabs/HealthTab';
+import SchedulesTab from './tabs/SchedulesTab';
 import { useOrchestratorChat } from '../hooks/useOrchestratorChat.js';
 import { createClient } from '../lib/client.js';
 import { getDeployment } from '../lib/environment/deployments';
 import { useSearchParams } from 'react-router-dom';
 import { useAuthContext } from '../providers/Auth.js';
 import { extractStringFromMessageContent } from '../utils/orchestratoreChat.js';
+import { orchestratorAPI } from '../services/orchestrator';
 import Message from './Message.jsx';
 import ReasoningBubble from './ReasoningBubble.tsx';
 import './ChatScrollbar.css';
@@ -107,8 +110,9 @@ const LandingPage2 = () => {
   const [startNewThread, setStartNewThread] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'plan' | 'tools' | 'activity' | 'health'
+    'plan' | 'tools' | 'activity' | 'health' | 'schedules'
   >('health');
+  const [activeRuns, setActiveRuns] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchThreadState = async () => {
@@ -138,6 +142,38 @@ const LandingPage2 = () => {
     };
     fetchThreadState();
   }, [threadId, session?.accessToken]);
+
+  // Fetch active runs for global stop button
+  useEffect(() => {
+    const fetchActiveRuns = async () => {
+      if (!threadId) {
+        setActiveRuns([]);
+        return;
+      }
+      try {
+        const runs = await orchestratorAPI.getActiveRuns(threadId);
+        setActiveRuns(runs);
+      } catch (error) {
+        console.error('Failed to fetch active runs:', error);
+        setActiveRuns([]);
+      }
+    };
+
+    fetchActiveRuns();
+    // Poll every 5 seconds for active runs
+    const interval = setInterval(fetchActiveRuns, 5000);
+    return () => clearInterval(interval);
+  }, [threadId]);
+
+  const handleStopAllRuns = async () => {
+    try {
+      await orchestratorAPI.cancelAllRuns();
+      setActiveRuns([]);
+      stopStream(); // Also stop any current streaming
+    } catch (error) {
+      console.error('Failed to cancel all runs:', error);
+    }
+  };
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -460,6 +496,27 @@ const LandingPage2 = () => {
         />
       </motion.div>
 
+      {/* Global Stop All Button */}
+      {(isLoading || activeRuns.length > 0) && isInChatState && (
+        <motion.div
+          className="absolute top-8 right-8 z-20"
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.8 }}
+          transition={{ duration: 0.3 }}
+        >
+          <button
+            onClick={handleStopAllRuns}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30 rounded-lg transition-colors backdrop-blur-sm"
+          >
+            <StopCircle className="w-5 h-5" />
+            <span className="text-sm font-medium">
+              Stop All {activeRuns.length > 0 && `(${activeRuns.length})`}
+            </span>
+          </button>
+        </motion.div>
+      )}
+
       {/* Main Content */}
       <motion.div
         className="h-screen flex flex-col justify-center items-center px-6 relative z-10"
@@ -513,16 +570,17 @@ const LandingPage2 = () => {
         {/* Chat Messages - Appear in Chat State */}
         {isInChatState && (
           <motion.div
-            className="absolute top-8 bottom-8 left-0 right-0 overflow-y-auto px-6 chat-scrollbar"
+            className="absolute top-8 left-0 right-0 overflow-y-auto px-6 chat-scrollbar"
             style={{ 
               maxWidth: '768px', 
-              margin: '0 auto'
+              margin: '0 auto',
+              bottom: '140px' // Reserve space for input box
             }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6, duration: 0.4 }}
           >
-            <div className="flex flex-col min-h-full justify-end">
+            <div className="flex flex-col min-h-full justify-end pb-48">
               {processedMessages.map((data, index) => (
                 <Message
                   key={data.message.id}
@@ -560,7 +618,7 @@ const LandingPage2 = () => {
                 </motion.div>
               )}
               
-              <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} className="h-32" />
             </div>
           </motion.div>
         )}
@@ -866,6 +924,17 @@ const LandingPage2 = () => {
             >
               <Heart size={20} />
             </button>
+
+            <button
+              onClick={() => setActiveTab('schedules')}
+              className={`p-3 rounded-lg transition-all duration-200 ${
+                activeTab === 'schedules'
+                  ? 'bg-white/10 text-white'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <Clock size={20} />
+            </button>
           </div>
 
           {/* Tab Content - Right Side */}
@@ -901,6 +970,8 @@ const LandingPage2 = () => {
                 <ActivityTab
                   activities={activities}
                   onClearActivities={() => setActivities([])}
+                  threadId={threadId || undefined}
+                  isLoading={isLoading}
                 />
               )}
 
@@ -909,6 +980,14 @@ const LandingPage2 = () => {
                 <HealthTab 
                   assistantId={getDeployment()?.agentId || 'deepagent'} 
                   threadId={threadId || undefined} 
+                />
+              )}
+
+              {/* Schedules Tab */}
+              {activeTab === 'schedules' && (
+                <SchedulesTab 
+                  threadId={threadId || undefined}
+                  assistantId={getDeployment()?.agentId || 'deepagent'}
                 />
               )}
             </AnimatePresence>
