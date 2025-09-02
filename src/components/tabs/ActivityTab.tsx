@@ -88,23 +88,22 @@ const ActivityTab = ({ activities, onClearActivities, threadId, isLoading }: Act
       return filter === 'all' || activity.level === filter;
     });
 
-  // Fetch active runs
+  // Use isLoading prop to determine active runs instead of polling
   useEffect(() => {
-    const fetchActiveRuns = async () => {
-      if (!threadId) return;
-      try {
-        const runs = await orchestratorAPI.getActiveRuns(threadId);
-        setActiveRuns(runs);
-      } catch (error) {
-        console.error('Failed to fetch active runs:', error);
-      }
-    };
-
-    fetchActiveRuns();
-    // Poll every 5 seconds for active runs
-    const interval = setInterval(fetchActiveRuns, 5000);
-    return () => clearInterval(interval);
-  }, [threadId]);
+    if (isLoading) {
+      setActiveRuns([{ 
+        run_id: 'stream-active', 
+        thread_id: threadId || '', 
+        assistant_id: 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5',
+        status: 'running',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        metadata: { source: 'stream' }
+      }]);
+    } else {
+      setActiveRuns([]);
+    }
+  }, [isLoading, threadId]);
 
 
   useEffect(() => {

@@ -11,6 +11,7 @@ import {
   Heart,
   Clock,
   StopCircle,
+  File,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import logo from '../assets/logo.svg';
@@ -20,16 +21,37 @@ import ToolsTab from './tabs/ToolsTab';
 import ActivityTab from './tabs/ActivityTab';
 import HealthTab from './tabs/HealthTab';
 import SchedulesTab from './tabs/SchedulesTab';
+import FilesTab from './tabs/FilesTab';
 import { useOrchestratorChat } from '../hooks/useOrchestratorChat.js';
 import { createClient } from '../lib/client.js';
 import { getDeployment } from '../lib/environment/deployments';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useParams } from 'react-router-dom';
 import { useAuthContext } from '../providers/Auth.js';
 import { extractStringFromMessageContent } from '../utils/orchestratoreChat.js';
 import { orchestratorAPI } from '../services/orchestrator';
 import Message from './Message.jsx';
 import ReasoningBubble from './ReasoningBubble.tsx';
 import './ChatScrollbar.css';
+
+// Loading phrases like Claude Code (moved outside component to prevent re-renders)
+const LOADING_PHRASES = [
+  'Analyzing the situation...',
+  'Processing your request...',
+  'Gathering information...',
+  'Thinking through the problem...',
+  'Connecting the dots...',
+  'Working on it...',
+  'Almost there...',
+  'Reviewing data...',
+  'Organizing thoughts...',
+  'Crafting a response...',
+  'Double-checking details...',
+  'Putting pieces together...',
+  'Exploring possibilities...',
+  'Finding the best approach...',
+  'Cross-referencing information...',
+  'Finalizing the solution...'
+];
 
 interface AttachedFile {
   id: string;
@@ -51,7 +73,8 @@ const LandingPage2 = () => {
   const [showCard, setShowCard] = useState(true);
   const [isFocused, setIsFocused] = useState(false);
   const [params, setParams] = useSearchParams();
-  const threadId = params.get('threadId');
+  const urlParams = useParams();
+  const threadId = urlParams.threadId || params.get('threadId');
   const setThreadId = useCallback(
     (id: string) => setParams({ threadId: id }),
     [setParams]
@@ -103,22 +126,37 @@ const LandingPage2 = () => {
   const [files, setFiles] = useState({});
   const [activities, setActivities] = useState([]);
   const [planData, setPlanData] = useState([]);
-  const [reasoningSteps, setReasoningSteps] = useState([]);
   const [availableTools, setAvailableTools] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLoadingThreadState, setIsLoadingThreadState] = useState(false);
   const [startNewThread, setStartNewThread] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'plan' | 'tools' | 'activity' | 'health' | 'schedules'
+    'plan' | 'tools' | 'activity' | 'health' | 'schedules' | 'files'
   >('health');
   const [activeRuns, setActiveRuns] = useState<any[]>([]);
+  const [threadStatus, setThreadStatus] = useState<string>('idle');
+  const [statusMessage, setStatusMessage] = useState<{type: 'error' | 'info' | 'success', message: string} | null>(null);
+  const [currentToolCall, setCurrentToolCall] = useState<{name: string, description?: string} | null>(null);
+  const [currentReasoning, setCurrentReasoning] = useState<string | null>(null);
+  const [loadingPhrase, setLoadingPhrase] = useState<string>('');
+
+  // Auto dismiss status messages after 5 seconds
+  useEffect(() => {
+    if (statusMessage) {
+      const timer = setTimeout(() => {
+        setStatusMessage(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [statusMessage]);
 
   useEffect(() => {
     const fetchThreadState = async () => {
       if (!threadId || !session?.accessToken) {
         setTodos([]);
         setFiles({});
+        setThreadStatus('idle');
         setIsLoadingThreadState(false);
         return;
       }
@@ -132,10 +170,40 @@ const LandingPage2 = () => {
           setTodos(currentState.todos || []);
           setFiles(currentState.files || {});
         }
-      } catch (error) {
+
+        // Fetch thread info for status
+        try {
+          const threadInfo = await orchestratorAPI.getThread(threadId);
+          setThreadStatus(threadInfo.status || 'idle');
+          
+          // Handle error status with base64 encoded error message
+          if (threadInfo.status === 'error' && threadInfo.error) {
+            try {
+              const decodedError = JSON.parse(atob(threadInfo.error));
+              setStatusMessage({
+                type: 'error',
+                message: `Thread Error: ${decodedError.message || decodedError.error || 'Unknown error'}`
+              });
+            } catch (decodeError) {
+              setStatusMessage({
+                type: 'error',
+                message: 'Thread has an error but could not decode error details'
+              });
+            }
+          }
+        } catch (statusError) {
+          console.warn('Could not fetch thread status:', statusError);
+          setThreadStatus('idle');
+        }
+      } catch (error: any) {
         console.error('Failed to fetch thread state:', error);
         setTodos([]);
         setFiles({});
+        setThreadStatus('idle');
+        setStatusMessage({
+          type: 'error', 
+          message: `Failed to load thread: ${error.message || 'Unknown error'}`
+        });
       } finally {
         setIsLoadingThreadState(false);
       }
@@ -143,27 +211,65 @@ const LandingPage2 = () => {
     fetchThreadState();
   }, [threadId, session?.accessToken]);
 
-  // Fetch active runs for global stop button
+  // Minimal polling - only check for error state on initial load
   useEffect(() => {
-    const fetchActiveRuns = async () => {
-      if (!threadId) {
-        setActiveRuns([]);
-        return;
-      }
+    if (!threadId) {
+      setActiveRuns([]);
+      return;
+    }
+
+    const checkForErrors = async () => {
       try {
-        const runs = await orchestratorAPI.getActiveRuns(threadId);
-        setActiveRuns(runs);
+        const threadInfo = await orchestratorAPI.getThread(threadId);
+        
+        // Handle error status with base64 encoded error message
+        if (threadInfo.status === 'error' && threadInfo.error) {
+          try {
+            const decodedError = JSON.parse(atob(threadInfo.error));
+            setStatusMessage({
+              type: 'error',
+              message: `Thread Error: ${decodedError.message || decodedError.error || 'Unknown error'}`
+            });
+          } catch (decodeError) {
+            setStatusMessage({
+              type: 'error',
+              message: 'Thread has an error but could not decode error details'
+            });
+          }
+        }
       } catch (error) {
-        console.error('Failed to fetch active runs:', error);
-        setActiveRuns([]);
+        console.warn('Failed to fetch thread status:', error);
       }
     };
 
-    fetchActiveRuns();
-    // Poll every 5 seconds for active runs
-    const interval = setInterval(fetchActiveRuns, 5000);
-    return () => clearInterval(interval);
+    // Only check once on initial load for errors
+    checkForErrors();
   }, [threadId]);
+
+  // Use LangChain stream state for real-time status instead of polling
+  useEffect(() => {
+    if (isLoading) {
+      setThreadStatus('busy');
+      setActiveRuns([{ id: 'stream-active', status: 'running' }]); // Simulate active run for UI
+      
+      // Start rotating loading phrases
+      const getRandomPhrase = () => LOADING_PHRASES[Math.floor(Math.random() * LOADING_PHRASES.length)];
+      setLoadingPhrase(getRandomPhrase());
+      
+      const phraseInterval = setInterval(() => {
+        setLoadingPhrase(getRandomPhrase());
+      }, 4500); // Change phrase every 4.5 seconds (similar to Claude Code)
+      
+      return () => clearInterval(phraseInterval);
+    } else {
+      setThreadStatus('idle');
+      setActiveRuns([]);
+      // Clear tool call and reasoning when loading stops
+      setCurrentToolCall(null);
+      setCurrentReasoning(null);
+      setLoadingPhrase('');
+    }
+  }, [isLoading]);
 
   const handleStopAllRuns = async () => {
     try {
@@ -217,14 +323,22 @@ const LandingPage2 = () => {
 
   const handleSendMessage = async () => {
     if (message.trim() || attachedFiles.length > 0) {
-      // Clear input
-      const userRequest = message?.trim();
-      setMessage('');
-      setAttachedFiles([]);
-      sendMessage(userRequest);
+      try {
+        // Clear input
+        const userRequest = message?.trim();
+        setMessage('');
+        setAttachedFiles([]);
+        setStatusMessage(null); // Clear any previous errors
+        sendMessage(userRequest);
 
-      // Switch to activity tab to see what's happening
-      setActiveTab('activity');
+        // Switch to activity tab to see what's happening
+        setActiveTab('activity');
+      } catch (error: any) {
+        setStatusMessage({
+          type: 'error',
+          message: `Failed to send message: ${error.message || 'Unknown error'}`
+        });
+      }
     }
   };
 
@@ -237,15 +351,38 @@ const LandingPage2 = () => {
     setIsFocused(true);
   };
 
+  // Extract tools from messages for thread-specific tools (no state updates here)
+  const threadSpecificToolsFromMessages = useMemo(() => {
+    const toolsInThread = new Set();
+    
+    messages.forEach((message: any) => {
+      if (message.type === 'ai') {
+        const toolCallsInMessage = [];
+        if (message.additional_kwargs?.tool_calls) {
+          toolCallsInMessage.push(...message.additional_kwargs.tool_calls);
+        } else if (message.tool_calls) {
+          toolCallsInMessage.push(...message.tool_calls.filter(tc => tc.name !== ''));
+        } else if (Array.isArray(message.content)) {
+          toolCallsInMessage.push(...message.content.filter(c => c.type === 'tool_use'));
+        }
+
+        toolCallsInMessage.forEach((toolCall) => {
+          const name = toolCall.function?.name || toolCall.name || toolCall.type || 'unknown';
+          toolsInThread.add(name);
+        });
+      }
+    });
+
+    return Array.from(toolsInThread).map(toolName => ({
+      name: toolName,
+      status: 'available',
+      description: `${toolName} tool used in this thread`,
+      category: 'thread-specific'
+    }));
+  }, [messages]);
+
   const processedMessages = useMemo(() => {
-    /* 
-  1. Loop through all messages
-  2. For each AI message, add the AI message, and any tool calls to the messageMap
-  3. For each tool message, find the corresponding tool call in the messageMap and update the status and output
-  4. Extract tool calls to activities instead of showing in chat
-  */
     const messageMap = new Map();
-    const newActivities = [];
     
     messages.forEach((message: any) => {
       if (message.type === 'ai') {
@@ -267,6 +404,7 @@ const LandingPage2 = () => {
           );
           toolCallsInMessage.push(...toolUseBlocks);
         }
+        
         const toolCallsWithStatus = toolCallsInMessage.map((toolCall) => {
           const name =
             toolCall.function?.name ||
@@ -279,67 +417,6 @@ const LandingPage2 = () => {
             toolCall.input ||
             {};
           
-          // Route different tool types to appropriate tabs
-          if (name === 'task' && args.subagent_type) {
-            // Task delegation goes to Plan tab
-            const planItem = {
-              id: toolCall.id || `plan-${Date.now()}-${Math.random()}`,
-              timestamp: new Date().toISOString(),
-              type: 'task_delegation',
-              subAgentType: args.subagent_type,
-              description: args.description || args.prompt || 'Task delegated',
-              status: 'pending'
-            };
-            setPlanData(prev => [planItem, ...prev].slice(0, 100));
-          } else if (name === 'list_tasks') {
-            // Only list_tasks goes to Plan tab as ToolCallBox
-            console.log(`Routing tool "${name}" to Plan tab`);
-            const planItem = {
-              id: toolCall.id || `plan-${Date.now()}-${Math.random()}`,
-              timestamp: new Date().toISOString(),
-              type: 'task_management',
-              description: `${name} tool execution`,
-              toolCall: {
-                id: toolCall.id || `tool-${Math.random()}`,
-                name,
-                args,
-                status: 'pending',
-                result: null
-              }
-            };
-            console.log('Created plan item:', planItem);
-            setPlanData(prev => [planItem, ...prev].slice(0, 100));
-          } else if (name.includes('think') || name.includes('reason') || name.includes('analyze')) {
-            // Reasoning goes to chat (will implement next)
-            const reasoningStep = {
-              id: toolCall.id || `reasoning-${Date.now()}-${Math.random()}`,
-              timestamp: new Date().toISOString(),
-              type: 'reasoning',
-              content: args.prompt || args.description || `${name} in progress...`,
-              status: 'pending'
-            };
-            setReasoningSteps(prev => [reasoningStep, ...prev].slice(0, 50));
-          } else {
-            // Regular tools go to Activity log
-            console.log(`Routing tool "${name}" to Activity log`);
-            const activity = {
-              id: toolCall.id || `tool-${Date.now()}-${Math.random()}`,
-              timestamp: new Date().toISOString(),
-              type: 'tool_call',
-              level: 'info',
-              data: {
-                toolCall: {
-                  id: toolCall.id || `tool-${Math.random()}`,
-                  name,
-                  args,
-                  status: 'pending',
-                  result: null
-                }
-              }
-            };
-            newActivities.push(activity);
-          }
-          
           return {
             id: toolCall.id || `tool-${Math.random()}`,
             name,
@@ -347,98 +424,19 @@ const LandingPage2 = () => {
             status: 'pending',
           };
         });
-        
-        // Only show messages with text content in chat, not pure tool call messages
-        const hasTextContent = extractStringFromMessageContent(message).trim().length > 0;
-        if (hasTextContent) {
+
+        // Only show AI messages with text content, hide pure tool call messages
+        const messageContent = extractStringFromMessageContent(message);
+        if (messageContent.trim().length > 0) {
           messageMap.set(message.id, {
             message,
-            toolCalls: [], // Remove tool calls from chat display
+            toolCalls: [], // Don't show tool calls in chat - activity log handles that
           });
         }
       } else if (message.type === 'tool') {
-        const toolCallId = message.tool_call_id;
-        if (!toolCallId) {
-          return;
-        }
-        
-        // Update existing tool call in activities with result
-        const toolResult = extractStringFromMessageContent(message);
-        
-        // Find existing tool call activity and update it
-        const existingActivityIndex = newActivities.findIndex(
-          activity => activity.data?.toolCall?.id === toolCallId
-        );
-        
-        if (existingActivityIndex !== -1) {
-          newActivities[existingActivityIndex].data.toolCall.result = toolResult;
-          newActivities[existingActivityIndex].data.toolCall.status = 'completed';
-          newActivities[existingActivityIndex].level = 'success';
-        } else {
-          // If not found in current batch, we'll update through a separate effect
-          setActivities(prev => prev.map(activity => {
-            if (activity.data?.toolCall?.id === toolCallId) {
-              return {
-                ...activity,
-                data: {
-                  ...activity.data,
-                  toolCall: {
-                    ...activity.data.toolCall,
-                    result: toolResult,
-                    status: 'completed'
-                  }
-                },
-                level: 'success'
-              };
-            }
-            return activity;
-          }));
-          
-          // Also update reasoning steps
-          setReasoningSteps(prev => prev.map(step => {
-            if (step.id === toolCallId) {
-              return {
-                ...step,
-                status: 'completed',
-                content: step.content + ` → ${toolResult.substring(0, 100)}${toolResult.length > 100 ? '...' : ''}`
-              };
-            }
-            return step;
-          }));
-          
-          // Also update plan items (both delegations and tool calls)
-          setPlanData(prev => prev.map(item => {
-            if (item.id === toolCallId) {
-              return {
-                ...item,
-                status: 'completed',
-                ...(item.toolCall && {
-                  toolCall: {
-                    ...item.toolCall,
-                    result: toolResult,
-                    status: 'completed'
-                  }
-                })
-              };
-            }
-            return item;
-          }));
-        }
-        
-        // Don't add tool results to chat - they go to activities only
-        for (const [, data] of messageMap.entries()) {
-          const toolCallIndex = data.toolCalls.findIndex(
-            (tc) => tc.id === toolCallId
-          );
-          if (toolCallIndex !== -1) {
-            data.toolCalls[toolCallIndex] = {
-              ...data.toolCalls[toolCallIndex],
-              status: 'completed',
-              result: toolResult,
-            };
-            break;
-          }
-        }
+        // Don't show tool results in chat - they're technical details for activity log
+        // Tool results are already shown in activity log
+        return;
       } else if (message.type === 'human') {
         messageMap.set(message.id, {
           message,
@@ -446,11 +444,6 @@ const LandingPage2 = () => {
         });
       }
     });
-    
-    // Update activities state with new tool calls and responses (only for non-routed items)
-    if (newActivities.length > 0) {
-      setActivities(prev => [...newActivities, ...prev].slice(0, 500)); // Keep last 500 activities
-    }
     
     const processedArray = Array.from(messageMap.values());
     return processedArray.map((data, index) => {
@@ -461,6 +454,42 @@ const LandingPage2 = () => {
       };
     });
   }, [messages]);
+
+  // Separate effect to update current tool call and reasoning (prevents infinite loops)
+  useEffect(() => {
+    if (!isLoading) {
+      setCurrentToolCall(null);
+      setCurrentReasoning(null);
+      return;
+    }
+
+    // Find the latest AI message with tool calls
+    const latestAIMessage = [...messages].reverse().find(m => m.type === 'ai');
+    if (latestAIMessage) {
+      // Extract tool calls
+      const toolCalls = latestAIMessage.tool_calls || 
+                       latestAIMessage.additional_kwargs?.tool_calls ||
+                       (Array.isArray(latestAIMessage.content) ? 
+                         latestAIMessage.content.filter(c => c.type === 'tool_use') : []);
+      
+      if (toolCalls && toolCalls.length > 0) {
+        const lastTool = toolCalls[toolCalls.length - 1];
+        const toolName = lastTool.name || lastTool.function?.name || 'unknown';
+        const toolArgs = lastTool.args || lastTool.function?.arguments || lastTool.input || {};
+        
+        setCurrentToolCall({
+          name: toolName,
+          description: toolArgs.description || toolArgs.prompt || `Executing ${toolName}`
+        });
+      }
+
+      // Extract reasoning content
+      const messageContent = extractStringFromMessageContent(latestAIMessage);
+      if (messageContent.trim().length > 0) {
+        setCurrentReasoning(messageContent);
+      }
+    }
+  }, [messages, isLoading]);
 
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
@@ -495,6 +524,28 @@ const LandingPage2 = () => {
           style={{ filter: 'brightness(0) invert(1)' }}
         />
       </motion.div>
+
+      {/* Thread Status Indicator */}
+      {threadId && (
+        <motion.div
+          className="absolute top-8 right-8 z-20 flex items-center gap-2"
+          animate={{ 
+            opacity: isInChatState ? 0.8 : 0.6,
+            right: (isLoading || activeRuns.length > 0) && isInChatState ? '200px' : '32px'
+          }}
+          transition={{ duration: 0.4 }}
+        >
+          <div className={`w-3 h-3 rounded-full ${
+            threadStatus === 'idle' ? 'bg-gray-500' :
+            threadStatus === 'busy' ? 'bg-green-500 animate-pulse' :
+            threadStatus === 'interrupted' ? 'bg-orange-500' :
+            threadStatus === 'error' ? 'bg-red-500' : 'bg-gray-500'
+          }`} />
+          <span className="text-white/80 text-sm font-medium capitalize">
+            {threadStatus === 'busy' ? 'Running' : threadStatus}
+          </span>
+        </motion.div>
+      )}
 
       {/* Global Stop All Button */}
       {(isLoading || activeRuns.length > 0) && isInChatState && (
@@ -593,14 +644,6 @@ const LandingPage2 = () => {
                 />
               ))}
               
-              {/* Reasoning Steps Experiment */}
-              {reasoningSteps.map((step, index) => (
-                <ReasoningBubble
-                  key={step.id}
-                  step={step}
-                  isLatest={index === 0 && step.status === 'pending'}
-                />
-              ))}
               
               {isLoading && processedMessages.length > 0 && processedMessages[processedMessages.length - 1].message.type === 'human' && (
                 <motion.div
@@ -622,6 +665,100 @@ const LandingPage2 = () => {
             </div>
           </motion.div>
         )}
+        {/* Current Tool Call & Reasoning Display */}
+        {(currentToolCall || currentReasoning) && isLoading && (
+          <motion.div
+            className="w-full"
+            style={{ maxWidth: '768px' }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              position: isInChatState ? 'fixed' : 'relative',
+              bottom: isInChatState ? (statusMessage ? '180px' : '140px') : 'auto',
+              left: isInChatState ? '25%' : 'auto',
+              transform: isInChatState ? 'translateX(-50%)' : 'none',
+              paddingLeft: isInChatState ? '24px' : '0px',
+              paddingRight: isInChatState ? '24px' : '0px',
+              zIndex: isInChatState ? 25 : 1,
+              marginBottom: isInChatState ? '0px' : '12px',
+            }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className="px-4 py-3 rounded-lg border bg-blue-950/30 border-blue-500/20 text-blue-200">
+              {currentToolCall && (
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                  <span className="text-sm font-medium">
+                    Executing: {currentToolCall.name}
+                  </span>
+                </div>
+              )}
+              {currentReasoning && (
+                <div className="text-sm text-blue-100/80 italic mb-2">
+                  {currentReasoning.length > 150 
+                    ? `${currentReasoning.substring(0, 150)}...` 
+                    : currentReasoning
+                  }
+                </div>
+              )}
+              {loadingPhrase && (
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                  <span className="text-sm text-blue-100/80">
+                    {loadingPhrase}
+                  </span>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Status Message */}
+        {statusMessage && (
+          <motion.div
+            className="w-full"
+            style={{ maxWidth: '768px' }}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{
+              opacity: 1,
+              y: 0,
+              position: isInChatState ? 'fixed' : 'relative',
+              bottom: isInChatState ? '140px' : 'auto',
+              left: isInChatState ? '25%' : 'auto',
+              transform: isInChatState ? 'translateX(-50%)' : 'none',
+              paddingLeft: isInChatState ? '24px' : '0px',
+              paddingRight: isInChatState ? '24px' : '0px',
+              zIndex: isInChatState ? 25 : 1,
+              marginBottom: isInChatState ? '0px' : '12px',
+            }}
+            transition={{ duration: 0.3 }}
+          >
+            <div className={`px-4 py-3 rounded-lg border flex items-center gap-3 ${
+              statusMessage.type === 'error' ? 'bg-red-950/50 border-red-500/30 text-red-200' :
+              statusMessage.type === 'success' ? 'bg-green-950/50 border-green-500/30 text-green-200' :
+              'bg-blue-950/50 border-blue-500/30 text-blue-200'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${
+                statusMessage.type === 'error' ? 'bg-red-500' :
+                statusMessage.type === 'success' ? 'bg-green-500' :
+                'bg-blue-500'
+              }`} />
+              <span className="text-sm">{statusMessage.message}</span>
+              <button 
+                onClick={() => setStatusMessage(null)}
+                className="ml-auto text-gray-400 hover:text-white"
+              >
+                ×
+              </button>
+            </div>
+          </motion.div>
+        )}
+
         {/* THE SAME INPUT BOX - Animates from middle to bottom */}
         <motion.div
           className="w-full"
@@ -935,6 +1072,17 @@ const LandingPage2 = () => {
             >
               <Clock size={20} />
             </button>
+
+            <button
+              onClick={() => setActiveTab('files')}
+              className={`p-3 rounded-lg transition-all duration-200 ${
+                activeTab === 'files'
+                  ? 'bg-white/10 text-white'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <File size={20} />
+            </button>
           </div>
 
           {/* Tab Content - Right Side */}
@@ -961,7 +1109,7 @@ const LandingPage2 = () => {
               {/* Tools Tab */}
               {activeTab === 'tools' && (
                 <ToolsTab
-                  tools={availableTools}
+                  tools={threadSpecificToolsFromMessages}
                 />
               )}
 
@@ -978,7 +1126,7 @@ const LandingPage2 = () => {
               {/* Health Tab */}
               {activeTab === 'health' && (
                 <HealthTab 
-                  assistantId={getDeployment()?.agentId || 'deepagent'} 
+                  assistantId={getDeployment()?.agentId || 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5'} 
                   threadId={threadId || undefined} 
                 />
               )}
@@ -987,7 +1135,15 @@ const LandingPage2 = () => {
               {activeTab === 'schedules' && (
                 <SchedulesTab 
                   threadId={threadId || undefined}
-                  assistantId={getDeployment()?.agentId || 'deepagent'}
+                  assistantId={getDeployment()?.agentId || 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5'}
+                />
+              )}
+
+              {/* Files Tab */}
+              {activeTab === 'files' && (
+                <FilesTab 
+                  files={files}
+                  isLoading={isLoadingThreadState}
                 />
               )}
             </AnimatePresence>

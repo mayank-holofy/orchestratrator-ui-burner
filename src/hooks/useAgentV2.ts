@@ -168,7 +168,7 @@ export const useAgentV2 = () => {
       // Start streaming - matching LangChain Studio exactly
       const stop = await orchestratorV2.streamRun(
         {
-          assistant_id: 'deepagent',
+          assistant_id: 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5',
           input: {
             messages: [{ 
               role: 'user', 

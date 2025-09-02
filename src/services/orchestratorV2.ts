@@ -42,7 +42,7 @@ class OrchestratorAPIV2 {
     this.abortController = new AbortController();
 
     const requestBody = {
-      assistant_id: params.assistant_id || 'deepagent',
+      assistant_id: params.assistant_id || 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5',
       input: params.input,
       config: params.config || {},
       stream_mode: params.stream_mode || ['values', 'messages', 'events', 'tasks', 'updates', 'debug', 'checkpoints'],
@@ -162,7 +162,7 @@ class OrchestratorAPIV2 {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        assistant_id: params.assistant_id || 'deepagent',
+        assistant_id: params.assistant_id || 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5',
         input: params.input,
         config: params.config || {}
       })

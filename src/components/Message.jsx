@@ -13,6 +13,7 @@ const Message = memo(
     index,
   }) => {
     const isUser = message.type === 'human';
+    const isToolResult = message.type === 'tool';
     const messageContent = extractStringFromMessageContent(message);
     const hasContent = messageContent && messageContent.trim() !== '';
     const hasToolCalls = toolCalls.length > 0;
@@ -65,10 +66,27 @@ const Message = memo(
               className={`px-4 py-3 rounded-2xl ${
                 message.type === 'human'
                   ? 'bg-white text-black'
+                  : isToolResult
+                  ? 'bg-green-950/30 text-green-100 border border-green-500/30'
                   : 'bg-[#1a1a1a] text-white border border-gray-800'
               }`}
             >
-              <p className="text-[15px]">{messageContent}</p>
+              <div 
+                className="text-[15px] prose prose-invert max-w-none"
+                dangerouslySetInnerHTML={{
+                  __html: messageContent
+                    // Basic markdown formatting
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')  // Bold
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')              // Italic
+                    .replace(/^### (.*$)/gm, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')  // H3
+                    .replace(/^## (.*$)/gm, '<h2 class="text-xl font-semibold mt-4 mb-2">$1</h2>')   // H2
+                    .replace(/^# (.*$)/gm, '<h1 class="text-2xl font-bold mt-4 mb-2">$1</h1>')      // H1
+                    .replace(/^- (.*$)/gm, '<li class="ml-4">• $1</li>')                           // Bullet points
+                    .replace(/^(\d+)\. (.*$)/gm, '<li class="ml-4">$1. $2</li>')                  // Numbered lists
+                    .replace(/`([^`]+)`/g, '<code class="bg-gray-700 px-1 rounded">$1</code>')     // Inline code
+                    .replace(/\n/g, '<br>')                                                        // Line breaks
+                }}
+              />
             </div>
           )}
           {/* <div
@@ -82,9 +100,8 @@ const Message = memo(
             })}
           </div> */}
           {hasToolCalls && (
-            <div className="toolCalls">
+            <div className="toolCalls mt-3 space-y-2">
               {toolCalls.map((toolCall) => {
-                if (toolCall.name === 'task') return null;
                 return <ToolCallBox key={toolCall.id} toolCall={toolCall} />;
               })}
             </div>

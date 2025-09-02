@@ -16,6 +16,14 @@ function App() {
               </AuthProvider>
             }
           />
+          <Route
+            path="/threads/:threadId"
+            element={
+              <AuthProvider>
+                <LandingPage2 />
+              </AuthProvider>
+            }
+          />
         </Routes>
       </Router>
     </div>

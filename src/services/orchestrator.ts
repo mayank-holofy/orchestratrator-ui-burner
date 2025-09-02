@@ -88,7 +88,7 @@ class OrchestratorAPI {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        graph_id: 'deepagent',
+        graph_id: 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5',
         name: params.name || 'AI Assistant',
         description: params.description,
         config: params.config || {},
@@ -299,7 +299,11 @@ class OrchestratorAPI {
   // Cancel all runs (global cancel)
   async cancelAllRuns(): Promise<void> {
     const response = await fetch(`${this.baseUrl}/runs/cancel`, {
-      method: 'POST'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status: 'all'
+      })
     });
     
     if (!response.ok) {
