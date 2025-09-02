@@ -21,11 +21,41 @@ interface CronJob {
 interface SchedulesTabProps {
   threadId?: string;
   assistantId?: string;
+  activities?: any[];
 }
 
-const SchedulesTab = ({ threadId, assistantId }: SchedulesTabProps) => {
+const SchedulesTab = ({ threadId, assistantId, activities = [] }: SchedulesTabProps) => {
   const [cronJobs, setCronJobs] = useState<CronJob[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Filter activities for schedule-related tasks (execution plans)
+  const executionPlanCalls = activities.filter(activity => {
+    if (activity.type === 'tool_call' && activity.data?.toolCall) {
+      const toolName = activity.data.toolCall.name;
+      return toolName === 'list_tasks' || 
+             toolName === 'list_scheduled_tasks' || 
+             toolName === 'check_scheduled_task' || 
+             toolName === 'schedule_task';
+    }
+    return false;
+  });
+
+  // Filter activities to show scheduled tool calls (excluding execution plan calls to avoid duplication)
+  const scheduledToolCalls = activities.filter(activity => {
+    if (activity.type === 'tool_call' && activity.data?.toolCall) {
+      const toolName = activity.data.toolCall.name;
+      // Exclude execution plan tools to avoid showing them twice
+      if (toolName === 'list_tasks' || 
+          toolName === 'list_scheduled_tasks' || 
+          toolName === 'check_scheduled_task' || 
+          toolName === 'schedule_task') {
+        return false;
+      }
+      const toolCallString = JSON.stringify(activity.data.toolCall);
+      return toolCallString.includes('schedule');
+    }
+    return false;
+  });
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedJob, setSelectedJob] = useState<CronJob | null>(null);
   const [formData, setFormData] = useState({
@@ -169,7 +199,7 @@ const SchedulesTab = ({ threadId, assistantId }: SchedulesTabProps) => {
           </div>
         </div>
         <p className="text-gray-500 text-sm mt-2">
-          {cronJobs.length} scheduled task{cronJobs.length !== 1 ? 's' : ''}
+          {cronJobs.length} cron job{cronJobs.length !== 1 ? 's' : ''} • {scheduledToolCalls.length} scheduled tool call{scheduledToolCalls.length !== 1 ? 's' : ''} • {executionPlanCalls.length} execution plan{executionPlanCalls.length !== 1 ? 's' : ''}
         </p>
       </div>
 
@@ -256,7 +286,7 @@ const SchedulesTab = ({ threadId, assistantId }: SchedulesTabProps) => {
             <RefreshCw className="w-8 h-8 animate-spin mb-2" />
             <p className="text-sm">Loading scheduled tasks...</p>
           </div>
-        ) : cronJobs.length === 0 ? (
+        ) : cronJobs.length === 0 && executionPlanCalls.length === 0 && scheduledToolCalls.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-gray-500">
             <Clock className="w-12 h-12 mb-4 opacity-50" />
             <p className="text-sm">No scheduled tasks</p>
@@ -329,6 +359,100 @@ const SchedulesTab = ({ threadId, assistantId }: SchedulesTabProps) => {
               </motion.div>
             );
           })
+        )}
+
+        {/* Execution Plans */}
+        {executionPlanCalls.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-white text-lg font-light mb-3">EXECUTION PLANS</h3>
+            <div className="space-y-3">
+              {executionPlanCalls.map((activity, index) => (
+                <motion.div
+                  key={activity.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="p-4 rounded-lg border bg-purple-500/10 border-purple-500/30"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="flex-shrink-0 mt-1">
+                        <CheckCircle className="w-4 h-4 text-purple-400" />
+                      </div>
+                      
+                      <div className="flex-1">
+                        <h4 className="text-white font-medium">
+                          {activity.data?.toolCall?.name || 'Execution Plan'}
+                        </h4>
+                        <p className="text-purple-400 text-sm mt-1">
+                          {new Date(activity.timestamp).toLocaleString()}
+                        </p>
+                        {activity.data?.toolCall?.args && (
+                          <div className="mt-2 p-2 bg-black/20 rounded text-xs">
+                            <div className="text-purple-300 mb-1">Arguments:</div>
+                            <pre className="text-gray-300 whitespace-pre-wrap">
+                              {JSON.stringify(activity.data.toolCall.args, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                        {activity.data?.toolCall?.result && (
+                          <div className="mt-2 p-2 bg-black/20 rounded text-xs">
+                            <div className="text-purple-300 mb-1">Result:</div>
+                            <div className="text-gray-300 whitespace-pre-wrap max-h-48 overflow-y-auto">
+                              {typeof activity.data.toolCall.result === 'string' 
+                                ? activity.data.toolCall.result
+                                : JSON.stringify(activity.data.toolCall.result, null, 2)
+                              }
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Scheduled Tool Calls */}
+        {scheduledToolCalls.length > 0 && (
+          <div className="mt-6">
+            <h3 className="text-white text-lg font-light mb-3">SCHEDULED TOOL CALLS</h3>
+            <div className="space-y-3">
+              {scheduledToolCalls.map((activity, index) => (
+                <motion.div
+                  key={activity.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="p-4 rounded-lg border bg-blue-500/10 border-blue-500/30"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="flex-shrink-0 mt-1">
+                        <CheckCircle className="w-4 h-4 text-blue-400" />
+                      </div>
+                      
+                      <div className="flex-1">
+                        <h4 className="text-white font-medium">
+                          {activity.data?.toolCall?.name || 'Scheduled Tool Call'}
+                        </h4>
+                        <p className="text-blue-400 text-sm mt-1">
+                          {new Date(activity.timestamp).toLocaleString()}
+                        </p>
+                        {activity.data?.toolCall?.args && (
+                          <div className="mt-2 p-2 bg-black/20 rounded text-xs">
+                            <pre className="text-gray-300 whitespace-pre-wrap">
+                              {JSON.stringify(activity.data.toolCall.args, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 

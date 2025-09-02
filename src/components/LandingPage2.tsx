@@ -411,9 +411,14 @@ const LandingPage2 = () => {
           const args = toolCall.function?.arguments || toolCall.args || toolCall.input || {};
           
           // Check if this is a TaskMaster tool (simplified filter)
-          const isTaskMasterTool = name.includes('_task') || 
+          // Exclude schedule-related tools as they should go to SchedulesTab, not PlanTab
+          const isTaskMasterTool = (name.includes('_task') || 
                                   name.includes('taskmaster') ||
-                                  (name === 'task' && args.subagent_type);
+                                  (name === 'task' && args.subagent_type)) &&
+                                  name !== 'list_tasks' &&
+                                  name !== 'list_scheduled_tasks' &&
+                                  name !== 'check_scheduled_task' &&
+                                  name !== 'schedule_task';
 
           if (isTaskMasterTool && toolCall.id) {
             const planItem = {
@@ -1257,6 +1262,7 @@ const LandingPage2 = () => {
                 <SchedulesTab 
                   threadId={threadId || undefined}
                   assistantId={getDeployment()?.agentId || 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5'}
+                  activities={activities}
                 />
               )}
 
