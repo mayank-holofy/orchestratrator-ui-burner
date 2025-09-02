@@ -393,6 +393,7 @@ const LandingPage2 = () => {
   // Route TaskMaster tools to Plan tab (deduplicated and clean)
   useEffect(() => {
     const planItems = new Map(); // Use Map to avoid duplicates
+    const activityItems = new Map(); // Use Map for non-TaskMaster tools too
     
     messages.forEach((message: any) => {
       if (message.type === 'ai') {
@@ -432,9 +433,29 @@ const LandingPage2 = () => {
             };
             planItems.set(toolCall.id, planItem);
           }
+
+          // Add NON-TaskMaster tools to activity log
+          if (!isTaskMasterTool && toolCall.id) {
+            const activity = {
+              id: toolCall.id, // Use tool call ID as key
+              timestamp: new Date().toISOString(),
+              type: 'tool_call',
+              level: 'info',
+              data: {
+                toolCall: {
+                  id: toolCall.id,
+                  name,
+                  args,
+                  status: 'pending',
+                  result: null
+                }
+              }
+            };
+            activityItems.set(toolCall.id, activity);
+          }
         });
       } else if (message.type === 'tool') {
-        // Update tool results
+        // Update tool results in Plan tab (TaskMaster tools)
         const toolCallId = message.tool_call_id;
         if (toolCallId && planItems.has(toolCallId)) {
           const existingItem = planItems.get(toolCallId);
@@ -450,12 +471,35 @@ const LandingPage2 = () => {
             }
           });
         }
+
+        // Update tool results in Activity log (NON-TaskMaster tools)
+        if (toolCallId && activityItems.has(toolCallId)) {
+          const existingActivity = activityItems.get(toolCallId);
+          const toolResult = extractStringFromMessageContent(message);
+          
+          activityItems.set(toolCallId, {
+            ...existingActivity,
+            level: 'success',
+            data: {
+              ...existingActivity.data,
+              toolCall: {
+                ...existingActivity.data.toolCall,
+                result: toolResult,
+                status: 'completed'
+              }
+            }
+          });
+        }
       }
     });
 
-    // Convert Map to Array and update state
+    // Update both Plan data and Activities
     const planArray = Array.from(planItems.values()).reverse(); // Reverse to show newest first
     setPlanData(planArray);
+    
+    // Convert Map to Array and set activities (prevents duplicates)
+    const activitiesArray = Array.from(activityItems.values()).reverse();
+    setActivities(activitiesArray.slice(0, 500));
   }, [messages]);
 
   const processedMessages = useMemo(() => {
