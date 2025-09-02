@@ -368,7 +368,16 @@ const LandingPage2 = () => {
 
         toolCallsInMessage.forEach((toolCall) => {
           const name = toolCall.function?.name || toolCall.name || toolCall.type || 'unknown';
-          toolsInThread.add(name);
+          const args = toolCall.function?.arguments || toolCall.args || toolCall.input || {};
+          
+          // Exclude TaskMaster tools from Tools tab (they go to Plan tab)
+          const isTaskMasterTool = name.includes('_task') || 
+                                  name.includes('taskmaster') ||
+                                  (name === 'task' && args.subagent_type);
+          
+          if (!isTaskMasterTool) {
+            toolsInThread.add(name);
+          }
         });
       }
     });
@@ -379,6 +388,74 @@ const LandingPage2 = () => {
       description: `${toolName} tool used in this thread`,
       category: 'thread-specific'
     }));
+  }, [messages]);
+
+  // Route TaskMaster tools to Plan tab (deduplicated and clean)
+  useEffect(() => {
+    const planItems = new Map(); // Use Map to avoid duplicates
+    
+    messages.forEach((message: any) => {
+      if (message.type === 'ai') {
+        const toolCallsInMessage = [];
+        if (message.additional_kwargs?.tool_calls) {
+          toolCallsInMessage.push(...message.additional_kwargs.tool_calls);
+        } else if (message.tool_calls) {
+          toolCallsInMessage.push(...message.tool_calls.filter(tc => tc.name !== ''));
+        } else if (Array.isArray(message.content)) {
+          toolCallsInMessage.push(...message.content.filter(c => c.type === 'tool_use'));
+        }
+
+        toolCallsInMessage.forEach((toolCall) => {
+          const name = toolCall.function?.name || toolCall.name || toolCall.type || 'unknown';
+          const args = toolCall.function?.arguments || toolCall.args || toolCall.input || {};
+          
+          // Check if this is a TaskMaster tool (simplified filter)
+          const isTaskMasterTool = name.includes('_task') || 
+                                  name.includes('taskmaster') ||
+                                  (name === 'task' && args.subagent_type);
+
+          if (isTaskMasterTool && toolCall.id) {
+            const planItem = {
+              id: toolCall.id, // Use actual tool call ID as key
+              timestamp: new Date().toISOString(),
+              type: name === 'task' && args.subagent_type ? 'task_delegation' : 'task_management',
+              subAgentType: args.subagent_type || undefined,
+              description: `${name} - ${args.description || args.prompt || `Executing ${name}`}`,
+              status: 'pending',
+              toolCall: {
+                id: toolCall.id,
+                name,
+                args,
+                status: 'pending',
+                result: null
+              }
+            };
+            planItems.set(toolCall.id, planItem);
+          }
+        });
+      } else if (message.type === 'tool') {
+        // Update tool results
+        const toolCallId = message.tool_call_id;
+        if (toolCallId && planItems.has(toolCallId)) {
+          const existingItem = planItems.get(toolCallId);
+          const toolResult = extractStringFromMessageContent(message);
+          
+          planItems.set(toolCallId, {
+            ...existingItem,
+            status: 'completed',
+            toolCall: {
+              ...existingItem.toolCall,
+              result: toolResult,
+              status: 'completed'
+            }
+          });
+        }
+      }
+    });
+
+    // Convert Map to Array and update state
+    const planArray = Array.from(planItems.values()).reverse(); // Reverse to show newest first
+    setPlanData(planArray);
   }, [messages]);
 
   const processedMessages = useMemo(() => {

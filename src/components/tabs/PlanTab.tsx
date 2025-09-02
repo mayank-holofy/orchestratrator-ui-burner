@@ -83,9 +83,39 @@ const PlanTab = ({ plan, isProcessing }: PlanTabProps) => {
                 {/* Task Content */}
                 <div className="flex-1">
                   {(task as any).toolCall ? (
-                    /* Task management tool - show full ToolCallBox */
-                    <div className="-m-2">
-                      <ToolCallBox toolCall={(task as any).toolCall} />
+                    /* Task management tool - show clean summary */
+                    <div>
+                      <div className="space-y-3">
+                        {/* Tool Call Request */}
+                        <div className="flex items-center gap-2">
+                          {getTaskIcon(task.status)}
+                          <span className="text-white font-medium">{(task as any).toolCall.name}</span>
+                          <span className="text-xs text-gray-500 uppercase">{task.status}</span>
+                        </div>
+                        
+                        {/* Tool Arguments (Request) */}
+                        {(task as any).toolCall.args && Object.keys((task as any).toolCall.args).length > 0 && (
+                          <div className="p-3 bg-blue-900/20 rounded border-l-2 border-blue-500/30">
+                            <div className="text-xs text-blue-400 mb-1">Request:</div>
+                            <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">
+                              {JSON.stringify((task as any).toolCall.args, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                        
+                        {/* Tool Result (Response) */}
+                        {(task as any).toolCall.result && (
+                          <div className="p-3 bg-green-900/20 rounded border-l-2 border-green-500/30">
+                            <div className="text-xs text-green-400 mb-1">Response:</div>
+                            <div className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
+                              {typeof (task as any).toolCall.result === 'string' 
+                                ? (task as any).toolCall.result
+                                : JSON.stringify((task as any).toolCall.result, null, 2)
+                              }
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     /* Regular task delegation */
