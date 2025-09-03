@@ -8,6 +8,7 @@ interface ReasoningBubbleProps {
     content: string;
     status: 'pending' | 'completed';
     timestamp: string;
+    toolCall?: {name: string, description?: string};
   };
   isLatest?: boolean;
 }
@@ -39,7 +40,8 @@ const ReasoningBubble = ({ step, isLatest = false }: ReasoningBubbleProps) => {
               <Brain className="w-4 h-4 text-indigo-400" />
             )}
             <span className="text-xs text-indigo-300 font-medium uppercase tracking-wide">
-              {step.status === 'pending' ? 'Thinking...' : 'Reasoning'}
+              {step.toolCall ? `Executing: ${step.toolCall.name}` : 
+               step.status === 'pending' ? 'Thinking...' : 'Reasoning'}
             </span>
           </div>
           <span className="text-xs text-gray-500">

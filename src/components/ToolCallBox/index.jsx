@@ -104,7 +104,6 @@ const ToolCallBox = memo(({ toolCall }) => {
 
   const hasContent = result || Object.keys(args).length > 0;
 
-  console.log('Data', toolCall);
 
   return (
     <>

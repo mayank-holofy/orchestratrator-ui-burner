@@ -12,8 +12,8 @@ import {
   Clock,
   StopCircle,
   File,
+  MessageCircle,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
 import logo from '../assets/logo.svg';
 import EmployeeCard from './EmployeeCard';
 import PlanTab from './tabs/PlanTab';
@@ -22,10 +22,13 @@ import ActivityTab from './tabs/ActivityTab';
 import HealthTab from './tabs/HealthTab';
 import SchedulesTab from './tabs/SchedulesTab';
 import FilesTab from './tabs/FilesTab';
+import WorkersTab from './tabs/WorkersTab';
+import WorkersList from './WorkersList';
 import { useOrchestratorChat } from '../hooks/useOrchestratorChat.js';
+import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { createClient } from '../lib/client.js';
 import { getDeployment } from '../lib/environment/deployments';
-import { useSearchParams, useParams } from 'react-router-dom';
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../providers/Auth.js';
 import { extractStringFromMessageContent } from '../utils/orchestratoreChat.js';
 import { orchestratorAPI } from '../services/orchestrator';
@@ -66,11 +69,60 @@ interface Message {
   timestamp: Date;
 }
 
+interface ReasoningStep {
+  id: string;
+  content: string;
+  status: 'pending' | 'completed';
+  timestamp: string;
+  toolCall?: {name: string, description?: string};
+}
+
 const LandingPage2 = () => {
+  const navigate = useNavigate();
   const [message, setMessage] = useState('');
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
   const [showCard, setShowCard] = useState(true);
+  const [agentCount, setAgentCount] = useState(0);
+  
+  // Speech recognition
+  const {
+    isListening,
+    isSupported: speechSupported,
+    transcript,
+    interimTranscript,
+    startListening,
+    stopListening,
+    resetTranscript
+  } = useSpeechRecognition({
+    continuous: false,
+    interimResults: true,
+    language: 'en-US',
+    onResult: (result) => {
+      if (result.isFinal) {
+        setMessage(prev => prev + result.transcript);
+        resetTranscript();
+      }
+    },
+    onError: (error) => {
+      console.error('Speech recognition error:', error);
+    }
+  });
+  
+  // Handle mic button click
+  const handleMicClick = useCallback(() => {
+    if (!speechSupported) {
+      alert('Speech recognition is not supported in your browser');
+      return;
+    }
+    
+    if (isListening) {
+      stopListening();
+    } else {
+      startListening();
+    }
+  }, [speechSupported, isListening, startListening, stopListening]);
+  
   const [isFocused, setIsFocused] = useState(false);
   const [params, setParams] = useSearchParams();
   const urlParams = useParams();
@@ -97,7 +149,6 @@ const LandingPage2 = () => {
         if (deployment?.agentId) {
           // Try to get assistant info which might include tools
           const assistant = await client.assistants.get(deployment.agentId);
-          console.log('Assistant info:', assistant);
           
           // For now, let's create a basic tools list based on what we see in activity
           // This is a temporary solution until we find the proper API
@@ -124,22 +175,21 @@ const LandingPage2 = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [todos, setTodos] = useState([]);
   const [files, setFiles] = useState({});
-  const [activities, setActivities] = useState([]);
-  const [planData, setPlanData] = useState([]);
   const [availableTools, setAvailableTools] = useState([]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isLoadingThreadState, setIsLoadingThreadState] = useState(false);
   const [startNewThread, setStartNewThread] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'plan' | 'tools' | 'activity' | 'health' | 'schedules' | 'files'
-  >('health');
+    'plan' | 'tools' | 'activity' | 'health' | 'schedules' | 'files' | 'workers'
+  >('workers');
   const [activeRuns, setActiveRuns] = useState<any[]>([]);
   const [threadStatus, setThreadStatus] = useState<string>('idle');
   const [statusMessage, setStatusMessage] = useState<{type: 'error' | 'info' | 'success', message: string} | null>(null);
   const [currentToolCall, setCurrentToolCall] = useState<{name: string, description?: string} | null>(null);
   const [currentReasoning, setCurrentReasoning] = useState<string | null>(null);
   const [loadingPhrase, setLoadingPhrase] = useState<string>('');
+  const [reasoningSteps, setReasoningSteps] = useState<ReasoningStep[]>([]);
 
   // Auto dismiss status messages after 5 seconds
   useEffect(() => {
@@ -150,6 +200,7 @@ const LandingPage2 = () => {
       return () => clearTimeout(timer);
     }
   }, [statusMessage]);
+
 
   useEffect(() => {
     const fetchThreadState = async () => {
@@ -268,6 +319,11 @@ const LandingPage2 = () => {
       setCurrentToolCall(null);
       setCurrentReasoning(null);
       setLoadingPhrase('');
+      
+      // Mark all pending reasoning steps as completed
+      setReasoningSteps(prev => prev.map(step => 
+        step.status === 'pending' ? { ...step, status: 'completed' } : step
+      ));
     }
   }, [isLoading]);
 
@@ -285,6 +341,36 @@ const LandingPage2 = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isInChatState, setIsInChatState] = useState(false);
+
+  // Auto-enter chat state when threadId is present (navigating to existing conversation)
+  useEffect(() => {
+    if (threadId && !isInChatState) {
+      setIsInChatState(true);
+      setShowCard(false);
+      setActiveTab('activity'); // Show activity to see conversation history
+    }
+  }, [threadId]);
+
+  // Handle escape key to go back to home screen
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && threadId) {
+        // Navigate back to home screen
+        navigate('/');
+        // Reset chat state
+        setIsInChatState(false);
+        setShowCard(true);
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener on unmount
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [threadId, navigate]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -324,6 +410,14 @@ const LandingPage2 = () => {
   const handleSendMessage = async () => {
     if (message.trim() || attachedFiles.length > 0) {
       try {
+        // Enter chat state and hide card on first message send
+        if (!isInChatState) {
+          setShowCard(false);
+          setIsInChatState(true);
+        }
+        
+        // Clear reasoning steps when starting a new message
+        setReasoningSteps([]);
         // Clear input
         const userRequest = message?.trim();
         setMessage('');
@@ -343,11 +437,8 @@ const LandingPage2 = () => {
   };
 
   const handleInputFocus = () => {
-    // Show side panel and enter chat state when focusing on input
-    if (!isInChatState) {
-      setShowCard(false);
-      setIsInChatState(true);
-    }
+    // Only set focus state, don't enter chat state yet
+    // Chat state will be triggered on first message send
     setIsFocused(true);
   };
 
@@ -390,8 +481,12 @@ const LandingPage2 = () => {
     }));
   }, [messages]);
 
-  // Route TaskMaster tools to Plan tab (deduplicated and clean)
-  useEffect(() => {
+  // Route TaskMaster tools to Plan tab (deduplicated and clean) - Using useMemo to prevent infinite loops
+  const { derivedPlanData, derivedActivities } = useMemo(() => {
+    if (!messages || messages.length === 0) {
+      return { derivedPlanData: [], derivedActivities: [] };
+    }
+    
     const planItems = new Map(); // Use Map to avoid duplicates
     const activityItems = new Map(); // Use Map for non-TaskMaster tools too
     
@@ -498,14 +593,16 @@ const LandingPage2 = () => {
       }
     });
 
-    // Update both Plan data and Activities
-    const planArray = Array.from(planItems.values()).reverse(); // Reverse to show newest first
-    setPlanData(planArray);
+    // Return both Plan data and Activities
+    const derivedPlanData = Array.from(planItems.values()).reverse(); // Reverse to show newest first
+    const derivedActivities = Array.from(activityItems.values()).reverse().slice(0, 500);
     
-    // Convert Map to Array and set activities (prevents duplicates)
-    const activitiesArray = Array.from(activityItems.values()).reverse();
-    setActivities(activitiesArray.slice(0, 500));
+    return { derivedPlanData, derivedActivities };
   }, [messages]);
+
+  // Use derived data directly instead of storing in state to prevent infinite loops
+  const currentPlanData = derivedPlanData;
+  const currentActivities = derivedActivities;
 
   const processedMessages = useMemo(() => {
     const messageMap = new Map();
@@ -613,6 +710,29 @@ const LandingPage2 = () => {
       const messageContent = extractStringFromMessageContent(latestAIMessage);
       if (messageContent.trim().length > 0) {
         setCurrentReasoning(messageContent);
+        
+        // Add or update reasoning step in chat history
+        const stepId = `reasoning-${Date.now()}`;
+        const newStep: ReasoningStep = {
+          id: stepId,
+          content: messageContent,
+          status: 'pending',
+          timestamp: new Date().toISOString(),
+          toolCall: currentToolCall || undefined
+        };
+        
+        setReasoningSteps(prev => {
+          // Check if this is an update to the latest step or a new step
+          const latest = prev[prev.length - 1];
+          if (latest && latest.status === 'pending' && latest.content !== messageContent) {
+            // Update the latest pending step
+            return [...prev.slice(0, -1), { ...latest, content: messageContent }];
+          } else if (!latest || latest.content !== messageContent) {
+            // Add new step
+            return [...prev, newStep];
+          }
+          return prev;
+        });
       }
     }
   }, [messages, isLoading]);
@@ -620,10 +740,9 @@ const LandingPage2 = () => {
   return (
     <div className="min-h-screen bg-black relative overflow-hidden">
       {/* Background Video */}
-      <motion.div
+      <div
         className="absolute inset-0 w-full h-full"
-        animate={{ opacity: isInChatState ? 0.3 : 1 }}
-        transition={{ duration: 0.6 }}
+        style={{ opacity: isInChatState ? 0.3 : 1, transition: 'opacity 0.6s' }}
       >
         <video
           autoPlay
@@ -635,13 +754,26 @@ const LandingPage2 = () => {
           <source src="/background-video.mp4" type="video/mp4" />
         </video>
         <div className="absolute inset-0 bg-black/30"></div>
-      </motion.div>
+      </div>
+
+      {/* Close Button - Only show in chat state */}
+      {isInChatState && (
+        <button
+          onClick={() => {
+            navigate('/');
+            setIsInChatState(false);
+            setShowCard(true);
+          }}
+          className="absolute top-6 left-17 z-50 p-3 rounded-lg bg-gray-900/50 border border-white/20 hover:bg-gray-800/60 transition-colors duration-200"
+        >
+          <X className="w-5 h-5 text-white" />
+        </button>
+      )}
 
       {/* Logo/Brand */}
-      <motion.div
+      <div
         className="absolute top-8 left-8 z-20"
-        animate={{ opacity: isInChatState ? 0.5 : 1 }}
-        transition={{ duration: 0.4 }}
+        style={{ opacity: isInChatState ? 0.5 : 1, transition: 'opacity 0.4s' }}
       >
         <img
           src={logo}
@@ -649,17 +781,17 @@ const LandingPage2 = () => {
           className="h-12 w-auto"
           style={{ filter: 'brightness(0) invert(1)' }}
         />
-      </motion.div>
+      </div>
 
       {/* Thread Status Indicator */}
       {threadId && (
-        <motion.div
+        <div
           className="absolute top-8 right-8 z-20 flex items-center gap-2"
-          animate={{ 
+          style={{ 
             opacity: isInChatState ? 0.8 : 0.6,
-            right: (isLoading || activeRuns.length > 0) && isInChatState ? '200px' : '32px'
+            right: (isLoading || activeRuns.length > 0) && isInChatState ? '200px' : '32px',
+            transition: 'all 0.4s'
           }}
-          transition={{ duration: 0.4 }}
         >
           <div className={`w-3 h-3 rounded-full ${
             threadStatus === 'idle' ? 'bg-gray-500' :
@@ -670,17 +802,14 @@ const LandingPage2 = () => {
           <span className="text-white/80 text-sm font-medium capitalize">
             {threadStatus === 'busy' ? 'Running' : threadStatus}
           </span>
-        </motion.div>
+        </div>
       )}
 
       {/* Global Stop All Button */}
       {(isLoading || activeRuns.length > 0) && isInChatState && (
-        <motion.div
+        <div
           className="absolute top-8 right-8 z-20"
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.8 }}
-          transition={{ duration: 0.3 }}
+          style={{ opacity: 1, transform: 'scale(1)', transition: 'all 0.3s' }}
         >
           <button
             onClick={handleStopAllRuns}
@@ -691,31 +820,29 @@ const LandingPage2 = () => {
               Stop All {activeRuns.length > 0 && `(${activeRuns.length})`}
             </span>
           </button>
-        </motion.div>
+        </div>
       )}
 
       {/* Main Content */}
-      <motion.div
+      <div
         className="h-screen flex flex-col justify-center items-center px-6 relative z-10"
-        initial={{ opacity: 0 }}
-        animate={{
+        style={{
           opacity: 1,
           width: isInChatState ? '50%' : '100%',
-          justifyContent: isInChatState ? 'flex-start' : 'center',
+          justifyContent: isInChatState ? 'flex-start' : 'flex-end',
           paddingTop: isInChatState ? '80px' : '0px',
+          paddingBottom: isInChatState ? '0px' : '80px',
+          transition: 'all 0.3s ease'
         }}
-        transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
       >
         {/* Employee Card and Title - Fade Out in Chat State */}
-        <AnimatePresence>
+        <div>
           {!isInChatState && (
-            <motion.div
+            <div
               className="w-full"
               style={{ maxWidth: '768px' }}
-              exit={{ opacity: 0, scale: 0.95, y: -50 }}
-              transition={{ duration: 0.5 }}
             >
-              <EmployeeCard visible={showCard} />
+              <EmployeeCard visible={false} />
 
               <div className="text-center mb-12">
                 <h1
@@ -740,23 +867,21 @@ const LandingPage2 = () => {
                   ></span>
                 </h2>
               </div>
-            </motion.div>
+
+            </div>
           )}
-        </AnimatePresence>
+        </div>
 
         {/* Chat Messages - Appear in Chat State */}
         {isInChatState && (
-          <motion.div
+          <div
             className="absolute top-8 left-0 right-0 overflow-y-auto px-6 chat-scrollbar"
             style={{ 
               maxWidth: '768px', 
               margin: '0 auto',
               bottom: '140px' // Reserve space for input box
             }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6, duration: 0.4 }}
-          >
+              >
             <div className="flex flex-col min-h-full justify-end pb-48">
               {processedMessages.map((data, index) => (
                 <Message
@@ -770,12 +895,19 @@ const LandingPage2 = () => {
                 />
               ))}
               
+              {/* Reasoning Steps */}
+              {reasoningSteps.map((step, index) => (
+                <ReasoningBubble
+                  key={step.id}
+                  step={step}
+                  isLatest={index === reasoningSteps.length - 1 && step.status === 'pending'}
+                />
+              ))}
+              
               
               {isLoading && processedMessages.length > 0 && processedMessages[processedMessages.length - 1].message.type === 'human' && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="flex justify-start mb-6"
+                <div
+                                  className="flex justify-start mb-6"
                 >
                   <div className="bg-[#1a1a1a] border border-gray-800 px-4 py-3 rounded-2xl">
                     <div className="flex gap-1">
@@ -784,75 +916,21 @@ const LandingPage2 = () => {
                       <span className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                     </div>
                   </div>
-                </motion.div>
+                </div>
               )}
               
               <div ref={messagesEndRef} className="h-32" />
             </div>
-          </motion.div>
-        )}
-        {/* Current Tool Call & Reasoning Display */}
-        {(currentToolCall || currentReasoning) && isLoading && (
-          <motion.div
-            className="w-full"
-            style={{ maxWidth: '768px' }}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{
-              opacity: 1,
-              y: 0,
-              position: isInChatState ? 'fixed' : 'relative',
-              bottom: isInChatState ? (statusMessage ? '180px' : '140px') : 'auto',
-              left: isInChatState ? '25%' : 'auto',
-              transform: isInChatState ? 'translateX(-50%)' : 'none',
-              paddingLeft: isInChatState ? '24px' : '0px',
-              paddingRight: isInChatState ? '24px' : '0px',
-              zIndex: isInChatState ? 25 : 1,
-              marginBottom: isInChatState ? '0px' : '12px',
-            }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="px-4 py-3 rounded-lg border bg-blue-950/30 border-blue-500/20 text-blue-200">
-              {currentToolCall && (
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                  <span className="text-sm font-medium">
-                    Executing: {currentToolCall.name}
-                  </span>
-                </div>
-              )}
-              {currentReasoning && (
-                <div className="text-sm text-blue-100/80 italic mb-2">
-                  {currentReasoning.length > 150 
-                    ? `${currentReasoning.substring(0, 150)}...` 
-                    : currentReasoning
-                  }
-                </div>
-              )}
-              {loadingPhrase && (
-                <div className="flex items-center gap-3">
-                  <div className="flex gap-1">
-                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-1 h-1 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                  </div>
-                  <span className="text-sm text-blue-100/80">
-                    {loadingPhrase}
-                  </span>
-                </div>
-              )}
-            </div>
-          </motion.div>
+          </div>
         )}
 
         {/* Status Message */}
         {statusMessage && (
-          <motion.div
+          <div
             className="w-full"
-            style={{ maxWidth: '768px' }}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{
+            style={{ 
+              maxWidth: '768px',
               opacity: 1,
-              y: 0,
               position: isInChatState ? 'fixed' : 'relative',
               bottom: isInChatState ? '140px' : 'auto',
               left: isInChatState ? '25%' : 'auto',
@@ -861,8 +939,8 @@ const LandingPage2 = () => {
               paddingRight: isInChatState ? '24px' : '0px',
               zIndex: isInChatState ? 25 : 1,
               marginBottom: isInChatState ? '0px' : '12px',
+              transition: 'all 0.3s ease'
             }}
-            transition={{ duration: 0.3 }}
           >
             <div className={`px-4 py-3 rounded-lg border flex items-center gap-3 ${
               statusMessage.type === 'error' ? 'bg-red-950/50 border-red-500/30 text-red-200' :
@@ -882,15 +960,14 @@ const LandingPage2 = () => {
                 ×
               </button>
             </div>
-          </motion.div>
+          </div>
         )}
 
         {/* THE SAME INPUT BOX - Animates from middle to bottom */}
-        <motion.div
+        <div
           className="w-full"
-          style={{ maxWidth: '768px' }}
-          initial={{ opacity: 0 }}
-          animate={{
+          style={{ 
+            maxWidth: '768px',
             opacity: 1,
             position: isInChatState ? 'fixed' : 'relative',
             bottom: isInChatState ? '24px' : 'auto',
@@ -899,9 +976,9 @@ const LandingPage2 = () => {
             paddingLeft: isInChatState ? '24px' : '0px',
             paddingRight: isInChatState ? '24px' : '0px',
             zIndex: isInChatState ? 25 : 1,
+            transition: 'all 0.3s ease'
           }}
-          transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
-        >
+          >
           <div className="relative">
             {/* Glow effect when focused - only in landing */}
             {isFocused && !isInChatState && (
@@ -916,9 +993,9 @@ const LandingPage2 = () => {
               />
             )}
 
-            <motion.div
+            <div
               className="relative"
-              animate={{
+              style={{ 
                 borderRadius: '16px',
                 padding: isInChatState ? '16px 20px' : '24px',
                 minHeight: isInChatState ? 'auto' : '140px',
@@ -934,10 +1011,10 @@ const LandingPage2 = () => {
                   isFocused && !isInChatState
                     ? '0 0 40px rgba(255, 255, 255, 0.1), inset 0 0 20px rgba(255, 255, 255, 0.05)'
                     : 'none',
-                y: isFocused && !isInChatState ? -2 : 0,
+                transform: isFocused && !isInChatState ? 'translateY(-2px)' : 'translateY(0)',
+                borderStyle: 'solid',
+                transition: 'all 0.3s ease'
               }}
-              transition={{ duration: 0.6 }}
-              style={{ borderStyle: 'solid' }}
             >
               {/* Attached Files */}
               {attachedFiles.length > 0 && (
@@ -961,11 +1038,20 @@ const LandingPage2 = () => {
                 </div>
               )}
 
+              {/* Listening Indicator */}
+              {isListening && !isInChatState && (
+                <div className="flex items-center justify-center gap-2 text-red-400 text-sm mb-4 animate-fade-in">
+                  <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                  <span>Listening... Speak now</span>
+                  <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                </div>
+              )}
+
               {/* Original textarea first in landing state */}
               {!isInChatState && (
                 <textarea
                   ref={textareaRef}
-                  value={message}
+                  value={message + (interimTranscript ? ` ${interimTranscript}` : '')}
                   onChange={(e) => setMessage(e.target.value)}
                   onFocus={handleInputFocus}
                   onBlur={() => setIsFocused(false)}
@@ -1008,15 +1094,20 @@ const LandingPage2 = () => {
                       className="hidden"
                     />
 
-                    <button className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors bg-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.12)] px-4 py-2 rounded-lg">
-                      <span style={{ fontSize: '15px' }}>Public</span>
-                      <ChevronDown size={18} />
-                    </button>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button className="text-gray-400 hover:text-white transition-colors p-2.5 hover:bg-[rgba(255,255,255,0.05)] rounded-lg">
-                      <Mic size={22} />
+                    <button 
+                      onClick={handleMicClick}
+                      className={`transition-colors p-2.5 rounded-lg ${
+                        isListening 
+                          ? 'text-red-400 bg-red-400/10 hover:text-red-300 hover:bg-red-400/20' 
+                          : 'text-gray-400 hover:text-white hover:bg-[rgba(255,255,255,0.05)]'
+                      }`}
+                      title={speechSupported ? (isListening ? 'Stop recording' : 'Start voice input') : 'Speech recognition not supported'}
+                      disabled={!speechSupported}
+                    >
+                      <Mic size={22} className={isListening ? 'animate-pulse' : ''} />
                     </button>
 
                     {isLoading && (
@@ -1043,6 +1134,15 @@ const LandingPage2 = () => {
                 </div>
               )}
 
+              {/* Listening Indicator for Chat State */}
+              {isListening && isInChatState && (
+                <div className="flex items-center justify-center gap-2 text-red-400 text-sm mb-4 animate-fade-in">
+                  <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                  <span>Listening... Speak now</span>
+                  <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
+                </div>
+              )}
+
               {/* Chat state - horizontal layout */}
               {isInChatState && (
                 <div className="flex items-center gap-3">
@@ -1055,7 +1155,7 @@ const LandingPage2 = () => {
 
                   <textarea
                     ref={textareaRef}
-                    value={message}
+                    value={message + (interimTranscript ? ` ${interimTranscript}` : '')}
                     onChange={(e) => setMessage(e.target.value)}
                     onFocus={() => setIsFocused(true)}
                     onBlur={() => setIsFocused(false)}
@@ -1079,8 +1179,17 @@ const LandingPage2 = () => {
                     }}
                   />
 
-                  <button className="text-gray-400 hover:text-white transition-colors p-2.5 hover:bg-[rgba(255,255,255,0.05)] rounded-lg">
-                    <Mic size={20} />
+                  <button 
+                    onClick={handleMicClick}
+                    className={`transition-colors p-2.5 rounded-lg ${
+                      isListening 
+                        ? 'text-red-400 bg-red-400/10 hover:text-red-300 hover:bg-red-400/20' 
+                        : 'text-gray-400 hover:text-white hover:bg-[rgba(255,255,255,0.05)]'
+                    }`}
+                    title={speechSupported ? (isListening ? 'Stop recording' : 'Start voice input') : 'Speech recognition not supported'}
+                    disabled={!speechSupported}
+                  >
+                    <Mic size={20} className={isListening ? 'animate-pulse' : ''} />
                   </button>
 
                   {isLoading && (
@@ -1105,41 +1214,47 @@ const LandingPage2 = () => {
                   </button>
                 </div>
               )}
-            </motion.div>
+            </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* Bottom Links - Fade out in chat state */}
-        <AnimatePresence>
+        {/* My Agents Section - Show previous conversations under My Agents */}
+        <div>
           {!isInChatState && (
-            <motion.div
-              className="flex justify-center gap-10 mt-10"
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <button
-                className="text-gray-400 hover:text-white transition-colors"
-                style={{ fontSize: '15px' }}
-              >
-                My Agents
-              </button>
-              <button
-                className="text-gray-400 hover:text-white transition-colors"
-                style={{ fontSize: '15px' }}
-              >
-                Templates
-              </button>
-            </motion.div>
+            <div className="mt-10">
+              <div className="flex flex-col items-center mb-8">
+                <h3 className="text-gray-400 text-lg mb-2">My Agents</h3>
+                {agentCount > 0 && (
+                  <span className="px-2 py-1 text-xs bg-white/10 text-gray-300 rounded-full mb-4">
+                    {agentCount}
+                  </span>
+                )}
+              </div>
+              
+              <WorkersList 
+                onWorkerSelect={(threadId) => {
+                  navigate(`/threads/${threadId}`);
+                }}
+                onNewWorker={() => {
+                  // Focus on the input to start a new conversation
+                  setIsInChatState(false);
+                  setTimeout(() => {
+                    textareaRef.current?.focus();
+                  }, 100);
+                }}
+                onCountChange={(count) => {
+                  setAgentCount(count);
+                }}
+              />
+            </div>
           )}
-        </AnimatePresence>
-      </motion.div>
+        </div>
+      </div>
 
       {/* Right Panel - Always Absolute (slides in from right) */}
-      <motion.div
+      <div
         className="absolute top-0 right-0 w-1/2 h-full bg-[#0a0a0a] border-l border-gray-900"
-        initial={{ x: '100%' }}
-        animate={{ x: isInChatState ? 0 : '100%' }}
-        transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+        style={{ transform: `translateX(${isInChatState ? '0' : '100%'})`, transition: 'transform 0.3s' }}
       >
         <div className="flex h-full">
           {/* Tab Icons - Left Side */}
@@ -1209,16 +1324,27 @@ const LandingPage2 = () => {
             >
               <File size={20} />
             </button>
+
+            <button
+              onClick={() => setActiveTab('workers')}
+              className={`p-3 rounded-lg transition-all duration-200 ${
+                activeTab === 'workers'
+                  ? 'bg-white/10 text-white'
+                  : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <MessageCircle size={20} />
+            </button>
           </div>
 
           {/* Tab Content - Right Side */}
           <div className="flex-1 p-18 overflow-hidden relative">
-            <AnimatePresence mode="wait">
+            <div>
               {/* Plan Tab */}
               {activeTab === 'plan' && (
                 <PlanTab
-                  plan={planData.length > 0 ? {
-                    tasks: planData.map(item => ({
+                  plan={currentPlanData.length > 0 ? {
+                    tasks: currentPlanData.map(item => ({
                       id: item.id,
                       title: item.description || (item.toolCall ? `${item.toolCall.name} tool` : 'Task'),
                       type: item.type || item.subAgentType || 'task',
@@ -1226,7 +1352,7 @@ const LandingPage2 = () => {
                       timestamp: item.timestamp,
                       toolCall: item.toolCall // Pass through tool call data
                     })),
-                    currentTask: planData.find(item => item.status === 'pending')?.id || null
+                    currentTask: currentPlanData.find(item => item.status === 'pending')?.id || null
                   } : null}
                   isProcessing={isLoading}
                 />
@@ -1242,8 +1368,11 @@ const LandingPage2 = () => {
               {/* Activity Tab */}
               {activeTab === 'activity' && (
                 <ActivityTab
-                  activities={activities}
-                  onClearActivities={() => setActivities([])}
+                  activities={currentActivities}
+                  onClearActivities={() => {
+                    // Clear activities is not supported with derived data
+                    // Activities are derived from messages, so they can't be cleared independently
+                  }}
                   threadId={threadId || undefined}
                   isLoading={isLoading}
                 />
@@ -1262,7 +1391,7 @@ const LandingPage2 = () => {
                 <SchedulesTab 
                   threadId={threadId || undefined}
                   assistantId={getDeployment()?.agentId || 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5'}
-                  activities={activities}
+                  activities={currentActivities}
                 />
               )}
 
@@ -1273,20 +1402,20 @@ const LandingPage2 = () => {
                   isLoading={isLoadingThreadState}
                 />
               )}
-            </AnimatePresence>
+
+              {/* Workers Tab */}
+              {activeTab === 'workers' && (
+                <WorkersTab 
+                  onWorkerSelect={(threadId) => {
+                    navigate(`/threads/${threadId}`);
+                  }}
+                />
+              )}
+            </div>
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Footer - Only in landing */}
-      <motion.div
-        className="absolute bottom-8 left-1/2 transform -translate-x-1/2 text-gray-500 z-10"
-        style={{ fontSize: '13px', letterSpacing: '0.5px' }}
-        animate={{ opacity: isInChatState ? 0 : 1 }}
-        transition={{ duration: 0.3 }}
-      >
-        YOU HAVE NO AGENTS
-      </motion.div>
     </div>
   );
 };

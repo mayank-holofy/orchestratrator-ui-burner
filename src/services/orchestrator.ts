@@ -129,6 +129,54 @@ class OrchestratorAPI {
     return response.json();
   }
 
+  async searchAssistants(params: {
+    graph_id?: string;
+    metadata?: Record<string, any>;
+    limit?: number;
+    offset?: number;
+    sort_by?: 'assistant_id' | 'created_at' | 'updated_at' | 'name' | 'graph_id';
+    sort_order?: 'asc' | 'desc';
+    select?: string[];
+  } = {}): Promise<Assistant[]> {
+    const response = await fetch(`${this.baseUrl}/assistants/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        graph_id: 'deepagent',
+        limit: 50,
+        sort_by: 'updated_at',
+        sort_order: 'desc',
+        ...params
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to search assistants: ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
+
+  async countAssistants(params: {
+    graph_id?: string;
+    metadata?: Record<string, any>;
+  } = {}): Promise<number> {
+    const response = await fetch(`${this.baseUrl}/assistants/count`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        graph_id: 'deepagent',
+        ...params
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to count assistants: ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
+
   // Thread Management
   async createThread(metadata?: Record<string, any>): Promise<Thread> {
     const response = await fetch(`${this.baseUrl}/threads`, {
@@ -160,6 +208,48 @@ class OrchestratorAPI {
     if (!response.ok) {
       throw new Error(`Failed to get thread state: ${response.statusText}`);
     }
+    return response.json();
+  }
+
+  async searchThreads(params: {
+    metadata?: Record<string, any>;
+    limit?: number;
+    offset?: number;
+    sort_by?: 'thread_id' | 'created_at' | 'updated_at' | 'status';
+    sort_order?: 'asc' | 'desc';
+    select?: string[];
+  } = {}): Promise<Thread[]> {
+    const response = await fetch(`${this.baseUrl}/threads/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        limit: 50,
+        sort_by: 'updated_at',
+        sort_order: 'desc',
+        ...params
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to search threads: ${response.statusText}`);
+    }
+    
+    return response.json();
+  }
+
+  async countThreads(params: {
+    metadata?: Record<string, any>;
+  } = {}): Promise<number> {
+    const response = await fetch(`${this.baseUrl}/threads/count`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to count threads: ${response.statusText}`);
+    }
+    
     return response.json();
   }
 
