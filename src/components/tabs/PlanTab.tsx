@@ -39,15 +39,8 @@ const PlanTab = ({ plan, isProcessing }: PlanTabProps) => {
   };
 
   return (
-    <motion.div
-      key="plan"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.3 }}
-      className="h-full overflow-y-auto tab-scrollbar"
-    >
-      <div className="mb-8">
+    <div className="h-full flex flex-col">
+      <div className="flex-shrink-0 mb-8">
         <div className="flex items-center justify-between">
           <h2 className="text-white text-2xl font-light">EXECUTION PLAN</h2>
           {isProcessing && (
@@ -58,8 +51,9 @@ const PlanTab = ({ plan, isProcessing }: PlanTabProps) => {
           )}
         </div>
       </div>
-
-      {!plan ? (
+      
+      <div className="flex-1 overflow-y-auto chat-scrollbar">
+        {!plan ? (
         <div className="flex flex-col items-center justify-center h-64 text-gray-500">
           <PlayCircle className="w-12 h-12 mb-4 opacity-50" />
           <p className="text-sm">No active plan</p>
@@ -107,7 +101,7 @@ const PlanTab = ({ plan, isProcessing }: PlanTabProps) => {
                         {(task as any).toolCall.result && (
                           <div className="p-3 bg-green-900/20 rounded border-l-2 border-green-500/30">
                             <div className="text-xs text-green-400 mb-1">Response:</div>
-                            <div className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-48 overflow-y-auto">
+                            <div className="text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-96 overflow-y-auto chat-scrollbar">
                               {typeof (task as any).toolCall.result === 'string' 
                                 ? (task as any).toolCall.result
                                 : JSON.stringify((task as any).toolCall.result, null, 2)
@@ -193,7 +187,8 @@ const PlanTab = ({ plan, isProcessing }: PlanTabProps) => {
           )}
         </div>
       )}
-    </motion.div>
+      </div>
+    </div>
   );
 };
 

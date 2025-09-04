@@ -22,7 +22,6 @@ import ActivityTab from './tabs/ActivityTab';
 import HealthTab from './tabs/HealthTab';
 import SchedulesTab from './tabs/SchedulesTab';
 import FilesTab from './tabs/FilesTab';
-import WorkersTab from './tabs/WorkersTab';
 import WorkersList from './WorkersList';
 import { useOrchestratorChat } from '../hooks/useOrchestratorChat.js';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
@@ -181,8 +180,8 @@ const LandingPage2 = () => {
   const [startNewThread, setStartNewThread] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    'plan' | 'tools' | 'activity' | 'health' | 'schedules' | 'files' | 'workers'
-  >('workers');
+    'plan' | 'tools' | 'activity' | 'health' | 'schedules' | 'files'
+  >('activity');
   const [activeRuns, setActiveRuns] = useState<any[]>([]);
   const [threadStatus, setThreadStatus] = useState<string>('idle');
   const [statusMessage, setStatusMessage] = useState<{type: 'error' | 'info' | 'success', message: string} | null>(null);
@@ -901,6 +900,7 @@ const LandingPage2 = () => {
                   key={step.id}
                   step={step}
                   isLatest={index === reasoningSteps.length - 1 && step.status === 'pending'}
+                  onStop={stopStream}
                 />
               ))}
               
@@ -1110,15 +1110,6 @@ const LandingPage2 = () => {
                       <Mic size={22} className={isListening ? 'animate-pulse' : ''} />
                     </button>
 
-                    {isLoading && (
-                      <button
-                        onClick={() => stopStream()}
-                        className="bg-red-500 text-white p-2.5 rounded-xl hover:bg-red-600 transition-colors"
-                        title="Stop execution"
-                      >
-                        <StopCircle size={20} />
-                      </button>
-                    )}
 
                     <button
                       onClick={handleSendMessage}
@@ -1192,15 +1183,6 @@ const LandingPage2 = () => {
                     <Mic size={20} className={isListening ? 'animate-pulse' : ''} />
                   </button>
 
-                  {isLoading && (
-                    <button
-                      onClick={() => stopStream()}
-                      className="bg-red-500 text-white p-2.5 rounded-xl hover:bg-red-600 transition-colors"
-                      title="Stop execution"
-                    >
-                      <StopCircle size={18} />
-                    </button>
-                  )}
 
                   <button
                     onClick={handleSendMessage}
@@ -1325,21 +1307,11 @@ const LandingPage2 = () => {
               <File size={20} />
             </button>
 
-            <button
-              onClick={() => setActiveTab('workers')}
-              className={`p-3 rounded-lg transition-all duration-200 ${
-                activeTab === 'workers'
-                  ? 'bg-white/10 text-white'
-                  : 'text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              <MessageCircle size={20} />
-            </button>
           </div>
 
           {/* Tab Content - Right Side */}
-          <div className="flex-1 p-18 overflow-hidden relative">
-            <div>
+          <div className="flex-1 p-18 relative">
+            <div className="h-full">
               {/* Plan Tab */}
               {activeTab === 'plan' && (
                 <PlanTab
@@ -1403,14 +1375,6 @@ const LandingPage2 = () => {
                 />
               )}
 
-              {/* Workers Tab */}
-              {activeTab === 'workers' && (
-                <WorkersTab 
-                  onWorkerSelect={(threadId) => {
-                    navigate(`/threads/${threadId}`);
-                  }}
-                />
-              )}
             </div>
           </div>
         </div>
