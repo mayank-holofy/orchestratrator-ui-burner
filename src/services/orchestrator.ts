@@ -1,6 +1,14 @@
 // Orchestrator API Service
 const API_BASE = 'https://orchestrator.some1.ai';
 
+// Request cache to prevent duplicate API calls
+const requestCache = new Map<string, Promise<any>>();
+const CACHE_DURATION = 5000; // 5 seconds
+
+// Cache for assistant and thread to prevent multiple registrations
+let cachedAssistant: Assistant | null = null;
+let cachedThread: Thread | null = null;
+
 interface Assistant {
   assistant_id: string;
   graph_id: string;
@@ -76,6 +84,28 @@ class OrchestratorAPI {
     this.baseUrl = baseUrl;
   }
 
+  // Helper to create cache key
+  private getCacheKey(url: string, options: any = {}): string {
+    return `${url}-${JSON.stringify(options)}`;
+  }
+
+  // Helper to get from cache or make request
+  private async cachedRequest<T>(key: string, requestFn: () => Promise<T>): Promise<T> {
+    if (requestCache.has(key)) {
+      return requestCache.get(key)!;
+    }
+
+    const promise = requestFn();
+    requestCache.set(key, promise);
+
+    // Clear from cache after duration
+    setTimeout(() => {
+      requestCache.delete(key);
+    }, CACHE_DURATION);
+
+    return promise;
+  }
+
   // Assistant Management
   async createAssistant(params: {
     name?: string;
@@ -84,41 +114,60 @@ class OrchestratorAPI {
     context?: any;
     metadata?: any;
   }): Promise<Assistant> {
-    const response = await fetch(`${this.baseUrl}/assistants`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        graph_id: 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5',
-        name: params.name || 'AI Assistant',
-        description: params.description,
-        config: params.config || {},
-        context: params.context || {},
-        metadata: params.metadata || {},
-        if_exists: 'do_nothing'
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to create assistant: ${response.statusText}`);
+    // Return cached assistant if exists
+    if (cachedAssistant) {
+      return cachedAssistant;
     }
+
+    const cacheKey = this.getCacheKey('create-assistant', params);
     
-    return response.json();
+    return this.cachedRequest(cacheKey, async () => {
+      const response = await fetch(`${this.baseUrl}/assistants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          graph_id: 'bd9d7831-8cd0-52cf-b4ff-e0a75afee4f5',
+          name: params.name || 'AI Assistant',
+          description: params.description,
+          config: params.config || {},
+          context: params.context || {},
+          metadata: params.metadata || {},
+          if_exists: 'do_nothing'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create assistant: ${response.statusText}`);
+      }
+      
+      const assistant = await response.json();
+      cachedAssistant = assistant; // Cache the result
+      return assistant;
+    });
   }
 
   async getAssistant(assistantId: string): Promise<Assistant> {
-    const response = await fetch(`${this.baseUrl}/assistants/${assistantId}`);
-    if (!response.ok) {
-      throw new Error(`Failed to get assistant: ${response.statusText}`);
-    }
-    return response.json();
+    const cacheKey = this.getCacheKey(`get-assistant-${assistantId}`);
+
+    return this.cachedRequest(cacheKey, async () => {
+      const response = await fetch(`${this.baseUrl}/assistants/${assistantId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to get assistant: ${response.statusText}`);
+      }
+      return response.json();
+    });
   }
 
   async getAssistantSchemas(assistantId: string): Promise<GraphSchema> {
-    const response = await fetch(`${this.baseUrl}/assistants/${assistantId}/schemas`);
-    if (!response.ok) {
-      throw new Error(`Failed to get assistant schemas: ${response.statusText}`);
-    }
-    return response.json();
+    const cacheKey = this.getCacheKey(`get-assistant-schemas-${assistantId}`);
+    
+    return this.cachedRequest(cacheKey, async () => {
+      const response = await fetch(`${this.baseUrl}/assistants/${assistantId}/schemas`);
+      if (!response.ok) {
+        throw new Error(`Failed to get assistant schemas: ${response.statusText}`);
+      }
+      return response.json();
+    });
   }
 
   async getAssistantGraph(assistantId: string): Promise<any> {
@@ -179,28 +228,43 @@ class OrchestratorAPI {
 
   // Thread Management
   async createThread(metadata?: Record<string, any>): Promise<Thread> {
-    const response = await fetch(`${this.baseUrl}/threads`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        metadata: metadata || {},
-        if_exists: 'do_nothing'
-      })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to create thread: ${response.statusText}`);
+    // Return cached thread if exists
+    if (cachedThread) {
+      return cachedThread;
     }
+
+    const cacheKey = this.getCacheKey('create-thread', metadata);
     
-    return response.json();
+    return this.cachedRequest(cacheKey, async () => {
+      const response = await fetch(`${this.baseUrl}/threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metadata: metadata || {},
+          if_exists: 'do_nothing'
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create thread: ${response.statusText}`);
+      }
+      
+      const thread = await response.json();
+      cachedThread = thread; // Cache the result
+      return thread;
+    });
   }
 
   async getThread(threadId: string): Promise<Thread> {
-    const response = await fetch(`${this.baseUrl}/threads/${threadId}`);
-    if (!response.ok) {
-      throw new Error(`Failed to get thread: ${response.statusText}`);
-    }
-    return response.json();
+    const cacheKey = this.getCacheKey(`get-thread-${threadId}`);
+    
+    return this.cachedRequest(cacheKey, async () => {
+      const response = await fetch(`${this.baseUrl}/threads/${threadId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to get thread: ${response.statusText}`);
+      }
+      return response.json();
+    });
   }
 
   async getThreadState(threadId: string): Promise<any> {
@@ -286,19 +350,27 @@ class OrchestratorAPI {
   }
 
   async getRun(threadId: string, runId: string): Promise<Run> {
-    const response = await fetch(`${this.baseUrl}/threads/${threadId}/runs/${runId}`);
-    if (!response.ok) {
-      throw new Error(`Failed to get run: ${response.statusText}`);
-    }
-    return response.json();
+    const cacheKey = this.getCacheKey(`get-run-${threadId}-${runId}`);
+    
+    return this.cachedRequest(cacheKey, async () => {
+      const response = await fetch(`${this.baseUrl}/threads/${threadId}/runs/${runId}`);
+      if (!response.ok) {
+        throw new Error(`Failed to get run: ${response.statusText}`);
+      }
+      return response.json();
+    });
   }
 
   async getThreadRuns(threadId: string): Promise<Run[]> {
-    const response = await fetch(`${this.baseUrl}/threads/${threadId}/runs`);
-    if (!response.ok) {
-      throw new Error(`Failed to get thread runs: ${response.statusText}`);
-    }
-    return response.json();
+    const cacheKey = this.getCacheKey(`get-thread-runs-${threadId}`);
+
+    return this.cachedRequest(cacheKey, async () => {
+      const response = await fetch(`${this.baseUrl}/threads/${threadId}/runs`);
+      if (!response.ok) {
+        throw new Error(`Failed to get thread runs: ${response.statusText}`);
+      }
+      return response.json();
+    });
   }
 
   // Streaming

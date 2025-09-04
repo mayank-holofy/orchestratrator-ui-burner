@@ -62,8 +62,29 @@ export const useAgent = (onMessageReceived?: (message: any) => void) => {
   const activitiesRef = useRef<ActivityEvent[]>([]);
   const maxActivities = 1000; // Keep last 1000 events
 
+  // Add activity event
+  const addActivity = useCallback((event: Omit<ActivityEvent, 'id' | 'timestamp'>) => {
+    const newEvent: ActivityEvent = {
+      ...event,
+      id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date().toISOString()
+    };
+
+    activitiesRef.current = [newEvent, ...activitiesRef.current].slice(0, maxActivities);
+    
+    setState(prev => ({
+      ...prev,
+      activities: activitiesRef.current
+    }));
+  }, []);
+
   // Initialize assistant and thread
   const initialize = useCallback(async () => {
+    // Prevent multiple initializations
+    if (state.assistant && state.thread) {
+      return;
+    }
+
     try {
       // Create or get assistant
       const assistant = await orchestratorAPI.createAssistant({
@@ -82,8 +103,8 @@ export const useAgent = (onMessageReceived?: (message: any) => void) => {
       });
 
       // Get available tools from schema
-      await orchestratorAPI.getAssistantSchemas(assistant.assistant_id);
-      const toolsList = extractToolsFromSchema({});
+      const schemas = await orchestratorAPI.getAssistantSchemas(assistant.assistant_id);
+      const toolsList = extractToolsFromSchema(schemas);
 
       setState(prev => ({
         ...prev,
@@ -111,7 +132,7 @@ export const useAgent = (onMessageReceived?: (message: any) => void) => {
         level: 'error'
       });
     }
-  }, []);
+  }, [state.assistant, state.thread, addActivity]);
 
   // Extract tools from schema (parsing the schema for available tools)
   const extractToolsFromSchema = (_schemas: any): AgentTool[] => {
@@ -131,22 +152,6 @@ export const useAgent = (onMessageReceived?: (message: any) => void) => {
       status: 'available' as const
     }));
   };
-
-  // Add activity event
-  const addActivity = useCallback((event: Omit<ActivityEvent, 'id' | 'timestamp'>) => {
-    const newEvent: ActivityEvent = {
-      ...event,
-      id: `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString()
-    };
-
-    activitiesRef.current = [newEvent, ...activitiesRef.current].slice(0, maxActivities);
-    
-    setState(prev => ({
-      ...prev,
-      activities: activitiesRef.current
-    }));
-  }, []);
 
   // Parse streaming events
   const handleStreamEvent = useCallback((event: StreamEvent) => {
@@ -307,11 +312,19 @@ export const useAgent = (onMessageReceived?: (message: any) => void) => {
     }));
   };
 
+  const statusCheckIntervalRef = useRef<number | null>(null);
+
   // Send a message/command to the agent
   const sendMessage = useCallback(async (message: string) => {
     if (!state.assistant || !state.thread) {
       setState(prev => ({ ...prev, error: 'Agent not initialized' }));
       return;
+    }
+
+    // Clear any existing status check
+    if (statusCheckIntervalRef.current) {
+      clearInterval(statusCheckIntervalRef.current);
+      statusCheckIntervalRef.current = null;
     }
 
     setState(prev => ({ ...prev, isProcessing: true, error: null }));
@@ -337,12 +350,15 @@ export const useAgent = (onMessageReceived?: (message: any) => void) => {
         streamConnection: { close: stop } as any
       }));
 
-      // Monitor run status
-      const checkStatus = setInterval(async () => {
+      // Monitor run status with proper cleanup
+      statusCheckIntervalRef.current = setInterval(async () => {
         try {
           const runStatus = await orchestratorAPI.getRun(state.thread!.thread_id, run.run_id);
           if (runStatus.status === 'success' || runStatus.status === 'error' || runStatus.status === 'timeout') {
-            clearInterval(checkStatus);
+            if (statusCheckIntervalRef.current) {
+              clearInterval(statusCheckIntervalRef.current);
+              statusCheckIntervalRef.current = null;
+            }
             setState(prev => ({ 
               ...prev, 
               isProcessing: false,
@@ -403,6 +419,12 @@ export const useAgent = (onMessageReceived?: (message: any) => void) => {
     if (!state.thread || !state.currentRun) return;
 
     try {
+      // Clear status check interval
+      if (statusCheckIntervalRef.current) {
+        clearInterval(statusCheckIntervalRef.current);
+        statusCheckIntervalRef.current = null;
+      }
+
       await orchestratorAPI.cancelRun(state.thread.thread_id, state.currentRun.run_id);
       
       setState(prev => ({
@@ -432,6 +454,10 @@ export const useAgent = (onMessageReceived?: (message: any) => void) => {
     return () => {
       if (state.streamConnection) {
         state.streamConnection.close();
+      }
+      if (statusCheckIntervalRef.current) {
+        clearInterval(statusCheckIntervalRef.current);
+        statusCheckIntervalRef.current = null;
       }
     };
   }, [state.streamConnection]);
