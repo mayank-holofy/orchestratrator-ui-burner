@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useEffect } from 'react';
 import { useStream } from '@langchain/langgraph-sdk/react';
 import { v4 as uuidv4 } from 'uuid';
 import { getDeployment } from '../lib/environment/deployments';
@@ -88,6 +88,13 @@ export function useOrchestratorChat(
       console.warn('Failed to cancel run:', e);
     }
   }, [stream]);
+
+  // Reset stream when threadId changes to prevent stale isLoading state
+  useEffect(() => {
+    if (stream?.stop) {
+      stream.stop();
+    }
+  }, [threadId]);
 
   return {
     messages: stream.messages,
